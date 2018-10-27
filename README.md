@@ -1,1 +1,1 @@
-# two-face-inpainting
+# Two-Face Inpainting
