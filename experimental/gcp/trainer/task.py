@@ -1,6 +1,12 @@
 import tensorflow as tf
 
+# To avoid getting the 'No module named _tkinter, please install the python-tk package' error
+# when running on GCP
+import matplotlib
+matplotlib.use('agg')
+
 import matplotlib.pyplot as plt
+
 import numpy as np
 import os
 import time
@@ -8,9 +14,15 @@ from skimage.transform import resize
 
 import trainer.model as model
 
-#TODO pasar a CLI arg
-# DATASET_PATH = "gs://first-ml-project-222122-mlengine/sample-data"
-DATASET_PATH = "/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace"
+
+# TODO pasar por flags
+# Ver tf.app.flags
+
+DATASET_PATH = "gs://first-ml-project-222122-mlengine/sample-data"
+#DATASET_PATH = "/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace"
+
+# TODO pasar por flags
+CHECKPOINTS_DIR = "gs://first-ml-project-222122-mlengine/checkpoints_2018_11_13_sample"
 
 DATASET_TRAIN_PATH = os.path.join(DATASET_PATH, "train")
 
@@ -19,11 +31,13 @@ PATCH_SIZE = 32
 
 BATCH_SIZE = 16
 
-PARALLEL_MAP_THREADS = 5
+DATASET_BUFFER = 10000
+SHUFFLE_BUFFER_SIZE = 1000
+PARALLEL_MAP_THREADS = 8
 
 EPOCHS = 50
-BATCHES_PER_PRINT = 10
-BATCHES_PER_CHECKPOINT = 50
+BATCHES_PER_PRINT = 20
+BATCHES_PER_CHECKPOINT = 100
 
 # Use tf eager execution for the whole app.
 tf.enable_eager_execution()
@@ -51,7 +65,9 @@ def get_reference_image_from_file_fn(train_reference_path, train_reference_paths
     idx = np.random.randint(len(reference_paths))
     image_file_name = reference_paths[idx]
     
-    reference_image =  plt.imread(os.path.join(train_reference_path, identity, image_file_name))
+    reference_image_file = tf.gfile.GFile(os.path.join(train_reference_path, identity, image_file_name),
+                                          mode='rb')
+    reference_image =  plt.imread(reference_image_file)
     reference_image = fix_image_encoding(reference_image)
     
     return (image, reference_image)
@@ -68,36 +84,14 @@ def fix_image_encoding(image):
     image = np.concatenate((image,)*3, axis=-1)
   return image
 
-def create_reference_paths_dict_from_gcp(base_path):
-  reference_dict = {}
-
-  iterator = bucket.list_blobs(prefix=base_path, delimiter='/')
-  for page in iterator.pages:
-      for prefix in page.prefixes:
-        print("PREFIX: ", prefix)
-        iter2 = bucket.list_blobs(prefix=prefix)
-        for file in iter2:
-          print(file.name)
-        print()
-
-  for identity_path in os.list_dir(base_path):
-    image_paths = []
-    full_identity_dir = os.path.join(base_path, identity_dir)
-    for image_path in os.list_dir(full_identity_dir):
-      image_paths.append(image_path)
-    identity = identity_dir.split('/')[-1]
-    reference_dict[identity] = image_paths
-    assert len(image_paths) > 0
-  return reference_dict
-
 def create_reference_paths_dict(base_path):
   reference_dict = {}
-  for identity_path in os.list_dir(base_path):
+  for identity_dir in tf.gfile.ListDirectory(base_path):
     image_paths = []
     full_identity_dir = os.path.join(base_path, identity_dir)
-    for image_path in os.list_dir(full_identity_dir):
+    for image_path in tf.gfile.ListDirectory(full_identity_dir):
       image_paths.append(image_path)
-    identity = identity_dir.split('/')[-1]
+    identity = identity_dir.replace('/', '')
     reference_dict[identity] = image_paths
     assert len(image_paths) > 0
   return reference_dict
@@ -186,13 +180,12 @@ def train_step(full_images,
 
 def train(dataset, epochs, generator, discriminator, validation_masked_images, validation_references):
 
-  train_step_graph = tf.contrib.eager.defun(train_step)
+  # train_step = tf.contrib.eager.defun(train_step)
 
   generator_optimizer = tf.train.AdamOptimizer(1e-4)
   discriminator_optimizer = tf.train.AdamOptimizer(1e-4)
 
-  checkpoint_dir = './checkpoints'
-  checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
+  checkpoint_prefix = os.path.join(CHECKPOINTS_DIR, "ckpt")
   checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                    discriminator_optimizer=discriminator_optimizer,
                                    generator=generator,
@@ -203,22 +196,22 @@ def train(dataset, epochs, generator, discriminator, validation_masked_images, v
   
   global_step = tf.train.get_or_create_global_step()
 
-  logdir = "./checkpoints"
+  logdir = CHECKPOINTS_DIR
   writer = tf.contrib.summary.create_file_writer(logdir)
   writer.set_as_default()
 
   
   for epoch in range(epochs):
     epoch_start = time.time()
-    
+    batch_start = time.time()
     for images in dataset:
-      batch_start = time.time()
       global_step.assign_add(1)
       
+      # See if we can get rid of this (we are already checking below)
       with tf.contrib.summary.record_summaries_every_n_global_steps(BATCHES_PER_PRINT):
         (full_images, full_reference_images) = images[0]
         (masked_images, unmasked_images, masked_reference_images) = images[1]
-        gen_loss, disc_loss = train_step_graph(full_images, 
+        gen_loss, disc_loss = train_step(full_images, 
                                                full_reference_images, 
                                                masked_images, 
                                                masked_reference_images,
@@ -226,23 +219,27 @@ def train(dataset, epochs, generator, discriminator, validation_masked_images, v
                                                discriminator,
                                                generator_optimizer,
                                                discriminator_optimizer)
-        
-        batch_end = time.time()
-        batch_time = batch_end-batch_start
-        global_steps_per_second = 1 / batch_time if batch_time > 0 else 0
-        tf.contrib.summary.scalar('global_step', global_steps_per_second)
+
         tf.contrib.summary.scalar('gen_loss', gen_loss)
         tf.contrib.summary.scalar('disc_loss', disc_loss)
+        if (global_step.numpy() % BATCHES_PER_PRINT == 0):  
+          
 
-        generated_images = generate_images(generator,
-                                           validation_masked_images,
-                                           validation_references)
-        
-        tf.contrib.summary.image('generated_images', generated_images, max_images=9)
+          generated_images = generate_images(generator,
+                                             validation_masked_images,
+                                             validation_references)
+          tf.contrib.summary.image('generated_images', generated_images, max_images=9)
 
-        print ('Time taken for step {} is {} sec'.format(global_step.numpy(),
-                                                         batch_time))    
-        print ('Gen loss: {} - Disc loss: {} - Step {}'.format(gen_loss, disc_loss, global_step.numpy()))  
+          batch_end = time.time()
+          batch_time = (batch_end - batch_start) / BATCHES_PER_PRINT
+          batch_start = time.time() # Restart the timer.
+          global_steps_per_second = 1 / batch_time if batch_time > 0 else 0
+          tf.contrib.summary.scalar('global_step', global_steps_per_second)
+
+          tf.logging.info('Gen loss: {} - Disc loss: {} - Steps per second: {} - Current step {}'.format(gen_loss, 
+                                                                                                         disc_loss, 
+                                                                                                         global_steps_per_second,
+                                                                                                         global_step.numpy()))
      
       if (global_step.numpy() % BATCHES_PER_CHECKPOINT == 0):
         checkpoint.save(file_prefix = checkpoint_prefix)
@@ -255,46 +252,55 @@ def main():
 
   train_reference_path = os.path.join(DATASET_TRAIN_PATH, "reference")
   train_reference_paths_dict = create_reference_paths_dict(train_reference_path)
-
+  
   # Make a Dataset of file names including all the PNG images files in
   # the relative image directory.
-  real_filenames_dataset = tf.data.Dataset.list_files(os.path.join(DATASET_TRAIN_PATH, "real/*/*.jpg"))
-  masked_filenames_dataset = tf.data.Dataset.list_files(os.path.join(DATASET_TRAIN_PATH, "masked/*/*.jpg"))
+  real_dataset = tf.data.Dataset.list_files(os.path.join(DATASET_TRAIN_PATH, "real/*/*.jpg"))
+  real_dataset = real_dataset.shuffle(SHUFFLE_BUFFER_SIZE)
 
-  # Make a Dataset of image tensors by reading and decoding the files, 
-  # and the path name for each image.
-  real_dataset = real_filenames_dataset.map(lambda x: (tf.image.decode_image(tf.read_file(x), channels=3), x), 
+  # TODO tal vez los maps pueden combinarse
+  real_dataset = real_dataset.map(lambda x: (tf.image.decode_image(tf.read_file(x), channels=3), x), 
         num_parallel_calls=PARALLEL_MAP_THREADS)
-  masked_dataset = masked_filenames_dataset.map(lambda x: (tf.image.decode_image(tf.read_file(x), channels=3), x), 
-        num_parallel_calls=PARALLEL_MAP_THREADS)
-
-  SHUFFLE_BUFFER_SIZE = 1000
-
-  real_dataset_mapped = real_dataset.map(
+  real_dataset = real_dataset.map(
       lambda image, path: tuple(
         tf.py_func(get_reference_image_from_file_fn(train_reference_path, train_reference_paths_dict), [image, path], [tf.uint8, tf.uint8])), 
-        num_parallel_calls=PARALLEL_MAP_THREADS).map(
+        num_parallel_calls=PARALLEL_MAP_THREADS)
+  real_dataset = real_dataset.map(
         lambda image, reference: (tf.image.resize_image_with_crop_or_pad(image, IMAGE_SIZE, IMAGE_SIZE), 
                                   tf.image.resize_image_with_crop_or_pad(reference, IMAGE_SIZE, IMAGE_SIZE)), 
-        num_parallel_calls=PARALLEL_MAP_THREADS).map(
+        num_parallel_calls=PARALLEL_MAP_THREADS)
+  real_dataset = real_dataset.map(
       lambda image, reference: (tf.image.convert_image_dtype(image, tf.float32), 
                                 tf.image.convert_image_dtype(reference, tf.float32)), 
-        num_parallel_calls=PARALLEL_MAP_THREADS).shuffle(SHUFFLE_BUFFER_SIZE).batch(BATCH_SIZE, drop_remainder=True)
+        num_parallel_calls=PARALLEL_MAP_THREADS)
+  real_dataset = real_dataset.batch(BATCH_SIZE, drop_remainder=True)
+  real_dataset = real_dataset.prefetch(1)
 
-  masked_dataset_mapped = masked_dataset.map(
+
+  masked_dataset = tf.data.Dataset.list_files(os.path.join(DATASET_TRAIN_PATH, "masked/*/*.jpg"))
+  masked_dataset = masked_dataset.shuffle(SHUFFLE_BUFFER_SIZE)
+  masked_dataset = masked_dataset.map(lambda x: (tf.image.decode_image(tf.read_file(x), channels=3), x), 
+        num_parallel_calls=PARALLEL_MAP_THREADS)
+  masked_dataset = masked_dataset.map(
       lambda image, path: 
         tf.py_func(get_reference_image_from_file_fn(train_reference_path, train_reference_paths_dict), [image, path], [tf.uint8, tf.uint8]), 
-        num_parallel_calls=PARALLEL_MAP_THREADS).map(
+        num_parallel_calls=PARALLEL_MAP_THREADS)
+  masked_dataset = masked_dataset.map(
         lambda image, reference: (tf.image.resize_image_with_crop_or_pad(image, IMAGE_SIZE, IMAGE_SIZE), 
                                   tf.image.resize_image_with_crop_or_pad(reference, IMAGE_SIZE, IMAGE_SIZE)), 
-        num_parallel_calls=PARALLEL_MAP_THREADS).map(
+        num_parallel_calls=PARALLEL_MAP_THREADS)
+  masked_dataset = masked_dataset.map(
       lambda image, reference: (tf.image.convert_image_dtype(image, tf.float32),
                                 tf.image.convert_image_dtype(reference, tf.float32)), 
-        num_parallel_calls=PARALLEL_MAP_THREADS).map(
+        num_parallel_calls=PARALLEL_MAP_THREADS)
+  masked_dataset = masked_dataset.map(
       get_mask_fn(IMAGE_SIZE, PATCH_SIZE), 
-        num_parallel_calls=PARALLEL_MAP_THREADS).shuffle(SHUFFLE_BUFFER_SIZE).batch(BATCH_SIZE, drop_remainder=True)
+        num_parallel_calls=PARALLEL_MAP_THREADS)
+  masked_dataset = masked_dataset.batch(BATCH_SIZE, drop_remainder=True)
+  masked_dataset = masked_dataset.prefetch(1)
 
-  train_dataset = tf.data.Dataset.zip((real_dataset_mapped, masked_dataset_mapped))
+
+  train_dataset = tf.data.Dataset.zip((real_dataset, masked_dataset))
 
 
   VALIDATION_IDENTITIES = [
@@ -313,8 +319,15 @@ def main():
   validation_references = []
   for identity in VALIDATION_IDENTITIES:
       full_identity_dir = os.path.join(DATASET_PATH, "validation", identity)
-      mask_image =  plt.imread(os.path.join(full_identity_dir, "001.jpg"))
-      reference_image = plt.imread(os.path.join(full_identity_dir, "002.jpg"))
+
+      mask_image_file = tf.gfile.GFile(os.path.join(full_identity_dir, "001.jpg"),
+                                       mode='rb')
+      mask_image =  plt.imread(mask_image_file)
+      
+      reference_image_file = tf.gfile.GFile(os.path.join(full_identity_dir, "002.jpg"),
+                                            mode='rb')
+      reference_image = plt.imread(reference_image_file)
+      
       mask_image = fix_image_encoding(mask_image)
       reference_image = fix_image_encoding(reference_image)
       
@@ -342,5 +355,5 @@ def main():
 
 
 if __name__ == "__main__":
-
+  print("Starting training")
   main()
