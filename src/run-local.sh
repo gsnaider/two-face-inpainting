@@ -8,3 +8,6 @@ gcloud ml-engine local train \
     --job-dir $MODEL_DIR \
     --module-name trainer.task \
     --package-path trainer/ \
+    -- \
+    --dataset_path "/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace" \
+    --checkpoints_dir "/home/gaston/workspace/two-face-inpainting/src/checkpoints"

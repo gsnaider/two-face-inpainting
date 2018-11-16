@@ -1,4 +1,5 @@
 import tensorflow as tf
+import argparse
 
 # To avoid getting the 'No module named _tkinter, please install the python-tk package' error
 # when running on GCP
@@ -14,24 +15,16 @@ from skimage.transform import resize
 
 import trainer.model as model
 
-# tf.logging config
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
-tf.logging.set_verbosity(tf.logging.INFO)
-
 
 # TODO pasar por flags
 # Ver tf.app.flags
 
-# DATASET_PATH = "gs://first-ml-project-222122-mlengine/sample-data"
-DATASET_PATH = "/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace"
+# DATASET_PATH = "gs://first-ml-project-222122-mlengine/data"
+# DATASET_PATH = "/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace"
 
 # TODO pasar por flags
-# CHECKPOINTS_DIR = "gs://first-ml-project-222122-mlengine/checkpoints_2018_11_13_sample"
-CHECKPOINTS_DIR = "/home/gaston/workspace/two-face-inpainting/src/checkpoints"
-
-DATASET_TRAIN_PATH = os.path.join(DATASET_PATH, "train")
-REAL_IMAGES_PATHS_FILE = os.path.join(DATASET_TRAIN_PATH, "real/real-files-shuf.txt")
-MASKED_IMAGES_PATHS_FILE = os.path.join(DATASET_TRAIN_PATH, "masked/masked-files-shuf.txt")
+# CHECKPOINTS_DIR = "gs://first-ml-project-222122-mlengine/checkpoints_2018_11_16"
+# CHECKPOINTS_DIR = "/home/gaston/workspace/two-face-inpainting/src/checkpoints"
 
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
@@ -92,6 +85,7 @@ def fix_image_encoding(image):
   return image
 
 def create_reference_paths_dict(base_path):
+  tf.logging.info('Creating reference paths dictionary')
   reference_dict = {}
   for identity_dir in tf.gfile.ListDirectory(base_path):
     image_paths = []
@@ -101,6 +95,7 @@ def create_reference_paths_dict(base_path):
     identity = identity_dir.replace('/', '')
     reference_dict[identity] = image_paths
     assert len(image_paths) > 0
+  tf.logging.info('Finished creating reference paths dictionary')
   return reference_dict
 
 
@@ -185,14 +180,14 @@ def train_step(full_images,
   
   return gen_loss, disc_loss
 
-def train(dataset, epochs, generator, discriminator, validation_masked_images, validation_references):
+def train(dataset, epochs, generator, discriminator, validation_masked_images, validation_references, checkpoints_dir):
 
   # train_step = tf.contrib.eager.defun(train_step)
 
   generator_optimizer = tf.train.AdamOptimizer(1e-4)
   discriminator_optimizer = tf.train.AdamOptimizer(1e-4)
 
-  checkpoint_prefix = os.path.join(CHECKPOINTS_DIR, "ckpt")
+  checkpoint_prefix = os.path.join(checkpoints_dir, "ckpt")
   checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                    discriminator_optimizer=discriminator_optimizer,
                                    generator=generator,
@@ -203,7 +198,7 @@ def train(dataset, epochs, generator, discriminator, validation_masked_images, v
   
   global_step = tf.train.get_or_create_global_step()
 
-  logdir = CHECKPOINTS_DIR
+  logdir = checkpoints_dir
   writer = tf.contrib.summary.create_file_writer(logdir)
   writer.set_as_default()
 
@@ -255,7 +250,11 @@ def train(dataset, epochs, generator, discriminator, validation_masked_images, v
                                                       time.time()-epoch_start))
   
 
-def main():
+def main(args):
+  DATASET_PATH = args.dataset_path
+  DATASET_TRAIN_PATH = os.path.join(DATASET_PATH, "train")
+  REAL_IMAGES_PATHS_FILE = os.path.join(DATASET_TRAIN_PATH, "real/real-files-shuf.txt")
+  MASKED_IMAGES_PATHS_FILE = os.path.join(DATASET_TRAIN_PATH, "masked/masked-files-shuf.txt")
 
   train_reference_path = os.path.join(DATASET_TRAIN_PATH, "reference")
   train_reference_paths_dict = create_reference_paths_dict(train_reference_path)
@@ -353,10 +352,34 @@ def main():
   generator, discriminator = model.make_models()
 
 
-  train(train_dataset, EPOCHS, generator, discriminator, validation_masked_images, validation_references)
-
+  train(train_dataset, EPOCHS, generator, discriminator, validation_masked_images, validation_references, args.checkpoints_dir)
 
 
 if __name__ == "__main__":
-  print("Starting training")
-  main()
+  tf.logging.info("Parsing flags")
+  parser = argparse.ArgumentParser()
+  parser.add_argument(
+    '--dataset_path',
+    help='GCS or local path to the dataset.',
+    default='gs://first-ml-project-222122-mlengine/data')
+  parser.add_argument(
+    '--checkpoints_dir',
+    help='GCS or local path where checkpoints will be stored.',
+    default='gs://first-ml-project-222122-mlengine/data')
+  parser.add_argument(
+      '--verbosity',
+      choices=['DEBUG', 'ERROR', 'FATAL', 'INFO', 'WARN'],
+      default='INFO')
+
+  args, _ = parser.parse_known_args()
+
+  # Set python level verbosity
+  tf.logging.set_verbosity(args.verbosity)
+  # Set C++ Graph Execution level verbosity
+  os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(
+      tf.logging.__dict__[args.verbosity] / 10)
+
+  tf.logging.info('Dataset: {} - checkpoints: {}'.format(args.dataset_path, args.checkpoints_dir))
+
+  tf.logging.info("Starting training")
+  main(args)
