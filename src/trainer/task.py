@@ -15,9 +15,9 @@ from skimage.transform import resize
 
 import trainer.model as model
 
-REAL_DATASET_PATHS_FILE = "real/real-files.txt"
-MASKED_DATASET_PATHS_FILE = "masked/masked-files.txt"
-REFERENCE_DATASET_PATHS_FILE = "reference/reference-files.txt"
+REAL_DATASET_PATHS_FILE = "real-files.txt"
+MASKED_DATASET_PATHS_FILE = "masked-files.txt"
+REFERENCE_DATASET_PATHS_FILE = "reference-files.txt"
 
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
@@ -35,6 +35,14 @@ BATCHES_PER_CHECKPOINT = 100
 # Use tf eager execution for the whole app.
 tf.enable_eager_execution()
 
+
+def get_os_join_fn(base_path):
+
+  def os_join(x):
+    x = x.decode('UTF-8') 
+    return os.path.join(base_path, x)
+
+  return os_join
 
 def get_reference_image(image, image_path):
   # Need to do this because when calling this function using tf.py_func, 
@@ -246,17 +254,23 @@ def train(dataset, epochs, generator, discriminator, validation_masked_images, v
 def main(args):
   DATASET_PATH = args.dataset_path
   DATASET_TRAIN_PATH = os.path.join(DATASET_PATH, "train")
-  REAL_IMAGES_PATHS_FILE = os.path.join(DATASET_TRAIN_PATH, REAL_DATASET_PATHS_FILE)
-  MASKED_IMAGES_PATHS_FILE = os.path.join(DATASET_TRAIN_PATH, MASKED_DATASET_PATHS_FILE)
+  TRAIN_REAL_PATH = os.path.join(DATASET_TRAIN_PATH, "real")
+  TRAIN_MASKED_PATH = os.path.join(DATASET_TRAIN_PATH, "masked")
   TRAIN_REFERENCE_PATH = os.path.join(DATASET_TRAIN_PATH, "reference")
+
+  REAL_IMAGES_PATHS_FILE = os.path.join(TRAIN_REAL_PATH, REAL_DATASET_PATHS_FILE)
+  MASKED_IMAGES_PATHS_FILE = os.path.join(TRAIN_MASKED_PATH, MASKED_DATASET_PATHS_FILE)
   
-  train_reference_paths_dict = create_reference_paths_dict(DATASET_TRAIN_PATH)
+  train_reference_paths_dict = create_reference_paths_dict(TRAIN_REFERENCE_PATH)
+
 
   real_dataset = tf.data.TextLineDataset(REAL_IMAGES_PATHS_FILE)
 
   # TODO tal vez los maps pueden combinarse
-  real_dataset = real_dataset.map(lambda x: (tf.image.decode_image(tf.read_file(x), channels=3), x), 
-        num_parallel_calls=PARALLEL_MAP_THREADS)
+  real_dataset = real_dataset.map(lambda img_filename: tf.py_func(get_os_join_fn(TRAIN_REAL_PATH), [img_filename], [tf.string]),
+                                  num_parallel_calls=PARALLEL_MAP_THREADS)
+  real_dataset = real_dataset.map(lambda img_path: (tf.image.decode_image(tf.read_file(img_path), channels=3), img_path), 
+                                  num_parallel_calls=PARALLEL_MAP_THREADS)
   real_dataset = real_dataset.map(
       lambda image, path: tuple(
         tf.py_func(get_reference_image_from_file_fn(TRAIN_REFERENCE_PATH, train_reference_paths_dict), [image, path], [tf.uint8, tf.uint8])), 
@@ -274,7 +288,9 @@ def main(args):
 
 
   masked_dataset = tf.data.TextLineDataset(MASKED_IMAGES_PATHS_FILE)
-  masked_dataset = masked_dataset.map(lambda x: (tf.image.decode_image(tf.read_file(x), channels=3), x), 
+  masked_dataset = masked_dataset.map(lambda img_filename: tf.py_func(get_os_join_fn(TRAIN_MASKED_PATH), [img_filename], [tf.string]),
+                                    num_parallel_calls=PARALLEL_MAP_THREADS)
+  masked_dataset = masked_dataset.map(lambda img_path: (tf.image.decode_image(tf.read_file(img_path), channels=3), img_path), 
         num_parallel_calls=PARALLEL_MAP_THREADS)
   masked_dataset = masked_dataset.map(
       lambda image, path: 

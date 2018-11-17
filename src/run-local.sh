@@ -10,5 +10,5 @@ gcloud ml-engine local train \
     --package-path trainer/ \
     -- \
     --dataset_path $DATASET_PATH \
-    --checkpoints_dir $MODEL_DIR
-    --verbosity "DEBUG"
+    --checkpoints_dir $MODEL_DIR \
+    --verbosity "INFO"
