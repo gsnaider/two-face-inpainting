@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 import os
-import time
 from skimage.transform import resize
 
 import trainer.model as model
@@ -27,15 +26,16 @@ BATCH_SIZE = 16
 
 DATASET_BUFFER = 10000
 SHUFFLE_BUFFER_SIZE = 1000
-PARALLEL_MAP_THREADS = 8
+PARALLEL_MAP_THREADS = 16
 
 MAX_STEPS = 1e6
 EPOCHS = 50
-BATCHES_PER_PRINT = 5
+BATCHES_PER_PRINT = 20
 BATCHES_PER_CHECKPOINT = 100
 
 GEN_LEARNING_RATE = 1e-4
 DISC_LEARNING_RATE = 1e-4
+
 
 def get_os_join_fn(base_path):
   def os_join(x):
@@ -143,6 +143,7 @@ def generate_images(generator, images, reference_images):
   # don't want to train the batchnorm layer when doing inference.
   mask_fn = get_mask_fn(IMAGE_SIZE, PATCH_SIZE, use_batch=True)
   mask_images = mask_fn(images)
+  reference_images = tf.constant(reference_images, tf.float32)
   patches = generator([mask_images, reference_images], training=False)
   generated_images = patch_image(patches, mask_images)
 
@@ -164,7 +165,7 @@ def train_step(sess, gen_optimizer, disc_optimizer, gen_loss, disc_loss,
 
 
 def train(dataset, generator, discriminator, validation_images,
-          validation_references, checkpoints_dir):
+          validation_references, experiment_dir):
   global_step = tf.train.get_or_create_global_step()
 
   dataset = dataset.repeat()
@@ -202,8 +203,9 @@ def train(dataset, generator, discriminator, validation_images,
   tf.summary.image('generated_images', generated_images, max_outputs=9)
 
   hooks = [tf.train.StopAtStepHook(num_steps=MAX_STEPS)]
-  with tf.train.MonitoredTrainingSession(checkpoint_dir=checkpoints_dir,
-                                         hooks=hooks) as sess:
+  with tf.train.MonitoredTrainingSession(
+          checkpoint_dir=os.path.join(experiment_dir, "train"),
+          hooks=hooks) as sess:
     while not sess.should_stop():
       train_step(sess, gen_optimizer, disc_optimizer, gen_loss, disc_loss,
                  global_step)
@@ -255,7 +257,10 @@ def main(args):
   train_reference_paths_dict = create_reference_paths_dict(
     TRAIN_REFERENCE_PATH)
 
+  # Real dataset
   real_dataset = tf.data.TextLineDataset(REAL_IMAGES_PATHS_FILE)
+
+  real_dataset = real_dataset.shuffle(SHUFFLE_BUFFER_SIZE)
 
   real_dataset = real_dataset.map(
     get_load_and_preprocess_image_fn(TRAIN_REAL_PATH, TRAIN_REFERENCE_PATH,
@@ -264,7 +269,10 @@ def main(args):
   real_dataset = real_dataset.prefetch(BATCH_SIZE * 2)
   real_dataset = real_dataset.batch(BATCH_SIZE, drop_remainder=True)
 
+  # Masked dataset
   masked_dataset = tf.data.TextLineDataset(MASKED_IMAGES_PATHS_FILE)
+  masked_dataset = masked_dataset.shuffle(SHUFFLE_BUFFER_SIZE)
+
   masked_dataset = masked_dataset.map(
     get_load_and_preprocess_image_fn(TRAIN_MASKED_PATH, TRAIN_REFERENCE_PATH,
                                      train_reference_paths_dict, masked=True),
@@ -275,6 +283,7 @@ def main(args):
   train_dataset = tf.data.Dataset.zip((real_dataset, masked_dataset))
   train_dataset = train_dataset.prefetch(1)
 
+  # Validation images
   VALIDATION_IDENTITIES = [
     "0005366",
     "0005367",
@@ -317,7 +326,7 @@ def main(args):
   generator, discriminator = model.make_models()
 
   train(train_dataset, generator, discriminator,
-        validation_images, validation_references, args.checkpoints_dir)
+        validation_images, validation_references, args.experiment_dir)
 
 
 if __name__ == "__main__":
@@ -328,7 +337,7 @@ if __name__ == "__main__":
     help='GCS or local path to the dataset.',
     default='gs://first-ml-project-222122-mlengine/data')
   parser.add_argument(
-    '--checkpoints_dir',
+    '--experiment_dir',
     help='GCS or local path where checkpoints will be stored.')
   parser.add_argument(
     '--verbosity',
@@ -344,7 +353,7 @@ if __name__ == "__main__":
     tf.logging.__dict__[args.verbosity] / 10)
 
   tf.logging.info('Dataset: {} - checkpoints: {}'.format(args.dataset_path,
-                                                         args.checkpoints_dir))
+                                                         args.experiment_dir))
 
   tf.logging.info("Starting training")
   main(args)

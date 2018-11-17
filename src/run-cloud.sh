@@ -2,22 +2,21 @@
 
 now=$(date +"%Y%m%d_%H%M%S")
 JOB_NAME="casia_vgg_$now"
-JOB_DIR="gs://two-face-inpainting-mlengine/experiments"
+BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 REGION="us-central1"
-OUTPUT_PATH="$JOB_DIR/$JOB_NAME"
+EXPERIMENT_DIR="$BASE_DIR/$JOB_NAME"
 DATASET_PATH="gs://two-face-inpainting-mlengine/data"
 
-echo $OUTPUT_PATH
+echo $EXPERIMENT_DIR
 
 gcloud ml-engine jobs submit training $JOB_NAME \
-    --job-dir $OUTPUT_PATH \
+    --job-dir $EXPERIMENT_DIR \
     --module-name trainer.task \
     --package-path trainer/ \
     --region $REGION \
     --scale-tier BASIC_GPU \
     --runtime-version 1.10 \
-    --python-version 3.5 \
     -- \
     --dataset_path $DATASET_PATH \
-    --checkpoints_dir $OUTPUT_PATH \
+    --experiment_dir $EXPERIMENT_DIR \
     --verbosity "INFO"
