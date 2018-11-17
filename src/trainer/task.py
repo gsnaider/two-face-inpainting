@@ -196,11 +196,14 @@ def train(dataset, generator, discriminator, validation_images,
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('disc_loss', disc_loss)
+  tf.summary.image('generated_train_images', generated_images, max_outputs=9)
 
-  generated_images = generate_images(generator,
-                                     validation_images,
-                                     validation_references)
-  tf.summary.image('generated_images', generated_images, max_outputs=9)
+  # TODO see why validation images are not being generated correctly.
+  # generated_validation_images = generate_images(generator,
+  #                                               validation_images,
+  #                                               validation_references)
+  # tf.summary.image('generated_validation_images', generated_validation_images,
+  #                  max_outputs=9)
 
   hooks = [tf.train.StopAtStepHook(num_steps=MAX_STEPS)]
   with tf.train.MonitoredTrainingSession(

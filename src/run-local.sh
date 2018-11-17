@@ -1,7 +1,7 @@
 #!/bin/bash
 
 MODEL_DIR="checkpoints"
-rm -rf $MODEL_DIR/*
+# rm -rf $MODEL_DIR/*
 DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace"
 # DATASET_PATH="gs://two-face-inpainting-mlengine/data"
 
