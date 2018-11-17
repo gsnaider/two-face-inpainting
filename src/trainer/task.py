@@ -29,13 +29,13 @@ DATASET_BUFFER = 10000
 SHUFFLE_BUFFER_SIZE = 1000
 PARALLEL_MAP_THREADS = 8
 
+MAX_STEPS = 1e6
 EPOCHS = 50
-BATCHES_PER_PRINT = 2
+BATCHES_PER_PRINT = 5
 BATCHES_PER_CHECKPOINT = 100
 
-# Use tf eager execution for the whole app.
-tf.enable_eager_execution()
-
+GEN_LEARNING_RATE = 1e-4
+DISC_LEARNING_RATE = 1e-4
 
 def get_os_join_fn(base_path):
   def os_join(x):
@@ -43,17 +43,6 @@ def get_os_join_fn(base_path):
     return os.path.join(base_path, x)
 
   return os_join
-
-
-def get_reference_image(image, image_path):
-  # Need to do this because when calling this function using tf.py_func,
-  # the image_path is passed as bytes instead of string.
-  image_path = image_path.decode('UTF-8')
-
-  identity = image_path.split('/')[-2]
-  references = train_reference_dict[identity]
-  idx = np.random.randint(len(references))
-  return (image, references[idx])
 
 
 def get_reference_image_path_fn(train_reference_path,
@@ -99,7 +88,7 @@ def create_reference_paths_dict(base_path):
   return reference_dict
 
 
-def get_mask_fn(img_size, patch_size):
+def get_mask_fn(img_size, patch_size, use_batch=False):
   patch_start = (img_size - patch_size) // 2
   img_size_after_patch = img_size - (patch_start + patch_size)
 
@@ -119,6 +108,9 @@ def get_mask_fn(img_size, patch_size):
 
     middle = tf.concat([middle_left, zeros, middle_right], axis=1)
     mask = tf.concat([upper_edge, middle, lower_edge], axis=0)
+
+    if use_batch:
+      mask = tf.expand_dims(mask, axis=0)
 
     return image * mask
 
@@ -146,129 +138,75 @@ def patch_image(patch, image):
   return tf.concat([upper_edge, middle, lower_edge], axis=1)
 
 
-def generate_images(generator, masked_images, reference_images):
+def generate_images(generator, images, reference_images):
   # make sure the training parameter is set to False because we
   # don't want to train the batchnorm layer when doing inference.
-  patches = generator([masked_images, reference_images], training=False)
-  generated_images = patch_image(patches, masked_images)
+  mask_fn = get_mask_fn(IMAGE_SIZE, PATCH_SIZE, use_batch=True)
+  mask_images = mask_fn(images)
+  patches = generator([mask_images, reference_images], training=False)
+  generated_images = patch_image(patches, mask_images)
 
   return generated_images
 
 
-def train_step(full_images,
-               full_reference_images,
-               masked_images,
-               masked_reference_images,
-               generator,
-               discriminator,
-               generator_optimizer,
-               discriminator_optimizer):
-  with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-    generated_patches = generator([masked_images, masked_reference_images],
-                                  training=True)
-    generated_images = patch_image(generated_patches, masked_images)
+def train_step(sess, gen_optimizer, disc_optimizer, gen_loss, disc_loss,
+               global_step):
+  _, gen_loss_value = sess.run([gen_optimizer, gen_loss])
+  _, disc_loss_value, step_value = sess.run(
+    [disc_optimizer, disc_loss, global_step])
 
-    real_output = discriminator([full_images, full_reference_images],
-                                training=True)
-    generated_output = discriminator(
-      [generated_images, masked_reference_images], training=True)
-
-    gen_loss = model.generator_loss(generated_output)
-    disc_loss = model.discriminator_loss(real_output, generated_output)
-
-  gradients_of_generator = gen_tape.gradient(gen_loss, generator.variables)
-  gradients_of_discriminator = disc_tape.gradient(disc_loss,
-                                                  discriminator.variables)
-
-  generator_optimizer.apply_gradients(
-    zip(gradients_of_generator, generator.variables))
-  discriminator_optimizer.apply_gradients(
-    zip(gradients_of_discriminator, discriminator.variables))
-
-  return gen_loss, disc_loss
+  # Divide by two because we increment the global_step twice per each train_step.
+  if (step_value // 2) % (BATCHES_PER_PRINT // 2) == 0:
+    tf.logging.info(
+      "Step: {} - Gen_loss: {} - Disc_loss: {}".format(step_value,
+                                                       gen_loss_value,
+                                                       disc_loss_value))
 
 
-def train(dataset, epochs, generator, discriminator, validation_masked_images,
+def train(dataset, generator, discriminator, validation_images,
           validation_references, checkpoints_dir):
-  # train_step = tf.contrib.eager.defun(train_step)
-
-  generator_optimizer = tf.train.AdamOptimizer(1e-4)
-  discriminator_optimizer = tf.train.AdamOptimizer(1e-4)
-
-  checkpoint_prefix = os.path.join(checkpoints_dir, "ckpt")
-  checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
-                                   discriminator_optimizer=discriminator_optimizer,
-                                   generator=generator,
-                                   discriminator=discriminator)
-
-  gen_losses = []
-  disc_losses = []
-
   global_step = tf.train.get_or_create_global_step()
 
-  logdir = checkpoints_dir
-  writer = tf.contrib.summary.create_file_writer(logdir)
-  writer.set_as_default()
+  dataset = dataset.repeat()
+  iterator = dataset.make_one_shot_iterator()
 
-  for epoch in range(epochs):
-    epoch_start = time.time()
-    batch_start = time.time()
-    for images in dataset:
-      global_step.assign_add(1)
+  train_batch = iterator.get_next()
+  (full_images, full_reference_images) = train_batch[0]
+  (masked_images, unmasked_images, masked_reference_images) = train_batch[1]
 
-      # See if we can get rid of this (we are already checking below)
-      with tf.contrib.summary.record_summaries_every_n_global_steps(
-              BATCHES_PER_PRINT):
-        (full_images, full_reference_images) = images[0]
-        (masked_images, unmasked_images, masked_reference_images) = \
-          images[1]
-        gen_loss, disc_loss = train_step(full_images,
-                                         full_reference_images,
-                                         masked_images,
-                                         masked_reference_images,
-                                         generator,
-                                         discriminator,
-                                         generator_optimizer,
-                                         discriminator_optimizer)
+  generated_patches = generator([masked_images, masked_reference_images],
+                                training=True)
+  generated_images = patch_image(generated_patches, masked_images)
 
-        tf.contrib.summary.scalar('gen_loss', gen_loss)
-        tf.contrib.summary.scalar('disc_loss', disc_loss)
-        if (global_step.numpy() % BATCHES_PER_PRINT == 0):
-          generated_images = generate_images(generator,
-                                             validation_masked_images,
-                                             validation_references)
-          tf.contrib.summary.image('generated_images',
-                                   generated_images, max_images=9)
+  real_output = discriminator([full_images, full_reference_images],
+                              training=True)
+  generated_output = discriminator(
+    [generated_images, masked_reference_images], training=True)
 
-          batch_end = time.time()
-          batch_time = (batch_end - batch_start) / BATCHES_PER_PRINT
-          batch_start = time.time()  # Restart the timer.
-          global_steps_per_second = 1 / batch_time if batch_time > 0 else 0
-          tf.contrib.summary.scalar('global_step',
-                                    global_steps_per_second)
+  gen_loss = model.generator_loss(generated_output)
+  disc_loss = model.discriminator_loss(real_output, generated_output)
 
-          tf.logging.info(
-            'Gen loss: {} - Disc loss: {} - Steps per second: {} - Current step {}'.format(
-              gen_loss,
-              disc_loss,
-              global_steps_per_second,
-              global_step.numpy()))
+  gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
+    gen_loss, var_list=generator.variables,
+    global_step=global_step)
+  disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+    disc_loss, var_list=discriminator.variables,
+    global_step=global_step)
 
-      if (global_step.numpy() % BATCHES_PER_CHECKPOINT == 0):
-        checkpoint.save(file_prefix=checkpoint_prefix)
+  tf.summary.scalar('gen_loss', gen_loss)
+  tf.summary.scalar('disc_loss', disc_loss)
 
-    tf.logging.info('Time taken for epoch {} is {} sec'.format(epoch + 1,
-                                                               time.time() - epoch_start))
+  generated_images = generate_images(generator,
+                                     validation_images,
+                                     validation_references)
+  tf.summary.image('generated_images', generated_images, max_outputs=9)
 
-
-def get_load_image_fn(base_path):
-  def load_image(img_filename):
-    image_full_path = tf.py_func(get_os_join_fn(base_path), [img_filename],
-                                 tf.string)
-    return (tf.image.decode_image(
-      tf.read_file(image_full_path), channels=3), image_full_path)
-
-  return load_image
+  hooks = [tf.train.StopAtStepHook(num_steps=MAX_STEPS)]
+  with tf.train.MonitoredTrainingSession(checkpoint_dir=checkpoints_dir,
+                                         hooks=hooks) as sess:
+    while not sess.should_stop():
+      train_step(sess, gen_optimizer, disc_optimizer, gen_loss, disc_loss,
+                 global_step)
 
 
 def get_load_and_preprocess_image_fn(base_path, reference_base_path,
@@ -301,6 +239,7 @@ def get_load_and_preprocess_image_fn(base_path, reference_base_path,
 
   return load_and_preprocess_image
 
+
 def main(args):
   DATASET_PATH = args.dataset_path
   DATASET_TRAIN_PATH = os.path.join(DATASET_PATH, "train")
@@ -318,7 +257,6 @@ def main(args):
 
   real_dataset = tf.data.TextLineDataset(REAL_IMAGES_PATHS_FILE)
 
-  # TODO tal vez los maps pueden combinarse
   real_dataset = real_dataset.map(
     get_load_and_preprocess_image_fn(TRAIN_REAL_PATH, TRAIN_REFERENCE_PATH,
                                      train_reference_paths_dict),
@@ -373,22 +311,13 @@ def main(args):
     validation_images.append(mask_image)
     validation_references.append(reference_image)
 
-  validation_masked_images = []
-  mask_fn = get_mask_fn(IMAGE_SIZE, PATCH_SIZE)
-  for mask_image, reference_image in zip(validation_images,
-                                         validation_references):
-    mask_image = mask_fn(mask_image)
-    validation_masked_images.append(mask_image.numpy())
-
   validation_images = np.array(validation_images).astype('float32')
   validation_references = np.array(validation_references).astype('float32')
-  validation_masked_images = np.array(validation_masked_images).astype(
-    'float32')
 
   generator, discriminator = model.make_models()
 
-  train(train_dataset, EPOCHS, generator, discriminator,
-        validation_masked_images, validation_references, args.checkpoints_dir)
+  train(train_dataset, generator, discriminator,
+        validation_images, validation_references, args.checkpoints_dir)
 
 
 if __name__ == "__main__":
