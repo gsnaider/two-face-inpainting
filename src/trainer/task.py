@@ -36,6 +36,10 @@ BATCHES_PER_CHECKPOINT = 100
 GEN_LEARNING_RATE = 1e-4
 DISC_LEARNING_RATE = 1e-4
 
+LAMBDA_REC = 1.0
+LAMBDA_ADV = 0.0
+
+
 
 def get_os_join_fn(base_path):
   def os_join(x):
@@ -184,8 +188,11 @@ def train(dataset, generator, discriminator, validation_images,
   generated_output = discriminator(
     [generated_images, masked_reference_images], training=True)
 
-  gen_loss = model.generator_loss(generated_output)
-  disc_loss = model.discriminator_loss(real_output, generated_output)
+  gen_loss = model.generator_loss(unmasked_images, generated_images,
+                                  generated_output, LAMBDA_REC,
+                                  LAMBDA_ADV)
+  disc_loss = model.discriminator_loss(real_output, generated_output,
+                                       LAMBDA_ADV)
 
   gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
     gen_loss, var_list=generator.variables,

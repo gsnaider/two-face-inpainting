@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+IMAGE_SIZE = 128
 
 def make_encoders():
   """Returns the gen and disc encoders."""
@@ -127,19 +128,25 @@ def make_discriminator_model(disc_encoder):
 
   return tf.keras.Model(inputs=[image, reference_image], outputs=logits)
 
+def reconstruction_loss(original_image, patched_image):
+  return tf.nn.l2_loss(original_image - patched_image) * 2.0 / (128.0 * 128.0)
 
-def generator_loss(generated_output):
+def generator_adversarial_loss(generated_output):
   return tf.losses.sigmoid_cross_entropy(tf.ones_like(generated_output),
                                          generated_output)
 
+def generator_loss(original_image, patched_image, generated_output, lambda_rec,
+                   lambda_adv):
+  return (lambda_rec * reconstruction_loss(original_image, patched_image) +
+          lambda_adv * generator_adversarial_loss(generated_output))
 
-def discriminator_loss(real_output, generated_output):
+def discriminator_loss(real_output, generated_output, lambda_adv):
   real_loss = tf.losses.sigmoid_cross_entropy(
     multi_class_labels=tf.ones_like(real_output), logits=real_output)
   generated_loss = tf.losses.sigmoid_cross_entropy(
     multi_class_labels=tf.zeros_like(generated_output), logits=generated_output)
   total_loss = real_loss + generated_loss
-  return total_loss
+  return lambda_adv * total_loss
 
 
 def make_models():
