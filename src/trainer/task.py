@@ -15,16 +15,9 @@ from skimage.transform import resize
 
 import trainer.model as model
 
-
-# TODO pasar por flags
-# Ver tf.app.flags
-
-# DATASET_PATH = "gs://first-ml-project-222122-mlengine/data"
-# DATASET_PATH = "/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace"
-
-# TODO pasar por flags
-# CHECKPOINTS_DIR = "gs://first-ml-project-222122-mlengine/checkpoints_2018_11_16"
-# CHECKPOINTS_DIR = "/home/gaston/workspace/two-face-inpainting/src/checkpoints"
+REAL_DATASET_PATHS_FILE = "real/real-files.txt"
+MASKED_DATASET_PATHS_FILE = "masked/masked-files.txt"
+REFERENCE_DATASET_PATHS_FILE = "reference/reference-files.txt"
 
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
@@ -87,12 +80,12 @@ def fix_image_encoding(image):
 def create_reference_paths_dict(base_path):
   tf.logging.info('Creating reference paths dictionary')
   reference_dict = {}
-  for identity_dir in tf.gfile.ListDirectory(base_path):
-    image_paths = []
-    full_identity_dir = os.path.join(base_path, identity_dir)
-    for image_path in tf.gfile.ListDirectory(full_identity_dir):
-      image_paths.append(image_path)
-    identity = identity_dir.replace('/', '')
+  reference_images_file = tf.gfile.GFile(os.path.join(base_path, REFERENCE_DATASET_PATHS_FILE),
+                                     mode='r')
+  for line in reference_images_file:
+    split_line = line.rstrip('\n').split(':')
+    identity = split_line[0]
+    image_paths = split_line[1].split(',')
     reference_dict[identity] = image_paths
     assert len(image_paths) > 0
   tf.logging.info('Finished creating reference paths dictionary')
@@ -253,11 +246,11 @@ def train(dataset, epochs, generator, discriminator, validation_masked_images, v
 def main(args):
   DATASET_PATH = args.dataset_path
   DATASET_TRAIN_PATH = os.path.join(DATASET_PATH, "train")
-  REAL_IMAGES_PATHS_FILE = os.path.join(DATASET_TRAIN_PATH, "real/real-files-shuf.txt")
-  MASKED_IMAGES_PATHS_FILE = os.path.join(DATASET_TRAIN_PATH, "masked/masked-files-shuf.txt")
-
-  train_reference_path = os.path.join(DATASET_TRAIN_PATH, "reference")
-  train_reference_paths_dict = create_reference_paths_dict(train_reference_path)
+  REAL_IMAGES_PATHS_FILE = os.path.join(DATASET_TRAIN_PATH, REAL_DATASET_PATHS_FILE)
+  MASKED_IMAGES_PATHS_FILE = os.path.join(DATASET_TRAIN_PATH, MASKED_DATASET_PATHS_FILE)
+  TRAIN_REFERENCE_PATH = os.path.join(DATASET_TRAIN_PATH, "reference")
+  
+  train_reference_paths_dict = create_reference_paths_dict(DATASET_TRAIN_PATH)
 
   real_dataset = tf.data.TextLineDataset(REAL_IMAGES_PATHS_FILE)
 
@@ -266,7 +259,7 @@ def main(args):
         num_parallel_calls=PARALLEL_MAP_THREADS)
   real_dataset = real_dataset.map(
       lambda image, path: tuple(
-        tf.py_func(get_reference_image_from_file_fn(train_reference_path, train_reference_paths_dict), [image, path], [tf.uint8, tf.uint8])), 
+        tf.py_func(get_reference_image_from_file_fn(TRAIN_REFERENCE_PATH, train_reference_paths_dict), [image, path], [tf.uint8, tf.uint8])), 
         num_parallel_calls=PARALLEL_MAP_THREADS)
   real_dataset = real_dataset.map(
         lambda image, reference: (tf.image.resize_image_with_crop_or_pad(image, IMAGE_SIZE, IMAGE_SIZE), 
@@ -285,7 +278,7 @@ def main(args):
         num_parallel_calls=PARALLEL_MAP_THREADS)
   masked_dataset = masked_dataset.map(
       lambda image, path: 
-        tf.py_func(get_reference_image_from_file_fn(train_reference_path, train_reference_paths_dict), [image, path], [tf.uint8, tf.uint8]), 
+        tf.py_func(get_reference_image_from_file_fn(TRAIN_REFERENCE_PATH, train_reference_paths_dict), [image, path], [tf.uint8, tf.uint8]), 
         num_parallel_calls=PARALLEL_MAP_THREADS)
   masked_dataset = masked_dataset.map(
         lambda image, reference: (tf.image.resize_image_with_crop_or_pad(image, IMAGE_SIZE, IMAGE_SIZE), 
@@ -364,8 +357,7 @@ if __name__ == "__main__":
     default='gs://first-ml-project-222122-mlengine/data')
   parser.add_argument(
     '--checkpoints_dir',
-    help='GCS or local path where checkpoints will be stored.',
-    default='gs://first-ml-project-222122-mlengine/data')
+    help='GCS or local path where checkpoints will be stored.')
   parser.add_argument(
       '--verbosity',
       choices=['DEBUG', 'ERROR', 'FATAL', 'INFO', 'WARN'],

@@ -3,7 +3,7 @@
 now=$(date +"%Y%m%d_%H%M%S")
 JOB_NAME="casia_vgg_$now"
 JOB_DIR="gs://first-ml-project-222122-mlengine"
-REGION="us-east1"
+REGION="us-central1"
 OUTPUT_PATH="$JOB_DIR/$JOB_NAME"
 DATASET_PATH="gs://first-ml-project-222122-mlengine/data"
 
