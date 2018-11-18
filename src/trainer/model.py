@@ -2,6 +2,28 @@ import tensorflow as tf
 
 IMAGE_SIZE = 128
 
+
+class ChannelWiseFCLayer(tf.keras.layers.Layer):
+  def __init__(self):
+    super(ChannelWiseFCLayer, self).__init__()
+
+  def build(self, input_shape):
+    _, self.width, self.height, self.n_feat_map = input_shape.as_list()
+    self.W = self.add_variable("W",
+                               shape=[self.n_feat_map, self.width * self.height,
+                                      self.width * self.height])
+
+  def call(self, input):
+    input_reshape = tf.reshape(input,
+                               [-1, self.width * self.height, self.n_feat_map])
+    input_transpose = tf.transpose(input_reshape, [2, 0, 1])
+    output = tf.matmul(input_transpose, self.W)
+
+    output_transpose = tf.transpose(output, [1, 2, 0])
+    output_reshape = tf.reshape(output_transpose,
+                                [-1, self.height, self.width, self.n_feat_map])
+    return output_reshape
+
 def make_encoders():
   """Returns the gen and disc encoders."""
 
@@ -12,19 +34,24 @@ def make_encoders():
   vgg16.trainable = False
   disc_encoder = vgg16
 
-  # Keep only first 9 layers of vgg for the generator
-
-  gen_encoder = tf.keras.layers.Conv2D(256, (3, 3),
+  # Keep only first 10 layers of vgg for the generator
+  gen_encoder = tf.keras.layers.Conv2D(512, (3, 3),
                                        strides=(1, 1),
-                                       padding='same')(vgg16.layers[8].output)
+                                       padding='same')(vgg16.layers[10].output)
+  #16x16x512
   gen_encoder = tf.keras.layers.BatchNormalization()(gen_encoder)
   gen_encoder = tf.keras.layers.LeakyReLU()(gen_encoder)
 
-  gen_encoder = tf.keras.layers.Conv2D(256, (3, 3),
+  gen_encoder = tf.keras.layers.Conv2D(512, (3, 3),
                                        strides=(1, 1),
                                        padding='same')(gen_encoder)
   gen_encoder = tf.keras.layers.BatchNormalization()(gen_encoder)
   gen_encoder = tf.keras.layers.LeakyReLU()(gen_encoder)
+  # 16x16x512
+
+  gen_encoder = tf.keras.layers.MaxPool2D(pool_size=(2, 2), strides=(2, 2))(
+    gen_encoder)
+  # 8x8x512
 
   gen_encoder = tf.keras.Model(inputs=vgg16.inputs,
                                outputs=gen_encoder)
@@ -38,40 +65,61 @@ def make_encoders():
 def make_generator_model(gen_encoder):
   masked_image = tf.keras.Input(shape=(128, 128, 3,), name='masked_image')
   masked_encoding = gen_encoder(masked_image)
-  # 32x32x256
+  # 8x8x512
 
   reference_image = tf.keras.Input(shape=(128, 128, 3,), name='reference_image')
   reference_encoding = gen_encoder(reference_image)
-  # 32x32x256
+  # 8x8x512
 
   encoding = tf.keras.layers.concatenate([masked_encoding, reference_encoding],
                                          axis=-1)
-  # 32x32x512
+  # 8x8x1024
+
+  encoding = ChannelWiseFCLayer()(encoding)
+  # 8x8x1024
 
   # Decoder
+  encoding = tf.keras.layers.Conv2DTranspose(512, (3, 3),
+                                             strides=(1, 1),
+                                             padding='same',
+                                             use_bias=False,
+                                             input_shape=(8, 8, 1024))(
+    encoding)
+  # 8x8x512
+
   encoding = tf.keras.layers.Conv2DTranspose(256, (3, 3),
                                              strides=(1, 1),
                                              padding='same',
                                              use_bias=False,
-                                             input_shape=(32, 32, 512))(
+                                             input_shape=(8, 8, 512))(
     encoding)
-  encoding = tf.keras.layers.BatchNormalization()(encoding)
-  encoding = tf.keras.layers.LeakyReLU()(encoding)
-  # 32x32x256
+  # 8x8x256
 
-  encoding = tf.keras.layers.Conv2DTranspose(64, (3, 3), strides=(1, 1),
-                                             padding='same', use_bias=False)(
+  encoding = tf.keras.layers.UpSampling2D(size=(2, 2))(encoding)
+  # 16x16x256
+
+  encoding = tf.keras.layers.Conv2DTranspose(128, (3, 3),
+                                             strides=(1, 1),
+                                             padding='same',
+                                             use_bias=False,
+                                             input_shape=(16, 16, 256))(
     encoding)
   encoding = tf.keras.layers.BatchNormalization()(encoding)
   encoding = tf.keras.layers.LeakyReLU()(encoding)
+  # 16x16x128
+
+  encoding = tf.keras.layers.Conv2DTranspose(64, (3, 3),
+                                             strides=(1, 1),
+                                             padding='same',
+                                             use_bias=False,
+                                             input_shape=(16, 16, 128))(
+    encoding)
+  encoding = tf.keras.layers.BatchNormalization()(encoding)
+  encoding = tf.keras.layers.LeakyReLU()(encoding)
+  # 16x16x64
+
+  encoding = tf.keras.layers.UpSampling2D(size=(2, 2))(encoding)
   # 32x32x64
-
-  encoding = tf.keras.layers.Conv2DTranspose(32, (3, 3), strides=(1, 1),
-                                             padding='same', use_bias=False)(
-    encoding)
-  encoding = tf.keras.layers.BatchNormalization()(encoding)
-  encoding = tf.keras.layers.LeakyReLU()(encoding)
-  # 32x32x32
 
   generated_patch = tf.keras.layers.Conv2DTranspose(3, (3, 3),
                                                     strides=(1, 1),

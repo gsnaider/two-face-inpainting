@@ -22,6 +22,7 @@ REFERENCE_DATASET_PATHS_FILE = "reference-files.txt"
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
 
+# TODO increase to 32 in cloud
 BATCH_SIZE = 16
 
 DATASET_BUFFER = 10000
