@@ -1,8 +1,9 @@
 #!/bin/bash
 
-MODEL_DIR="checkpoints"
+MODEL_DIR="checkpoints-test"
 rm -rf $MODEL_DIR/*
-DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace"
+DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data"
+# DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data/data.zip"
 # DATASET_PATH="gs://two-face-inpainting-mlengine/data"
 
 gcloud ml-engine local train \

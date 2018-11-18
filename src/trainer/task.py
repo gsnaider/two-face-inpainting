@@ -1,5 +1,7 @@
 import tensorflow as tf
 import argparse
+import fs
+from fs.zipfs import ZipFS
 
 # To avoid getting the 'No module named _tkinter, please install the python-tk package' error
 # when running on GCP
@@ -19,11 +21,13 @@ REAL_DATASET_PATHS_FILE = "real-files.txt"
 MASKED_DATASET_PATHS_FILE = "masked-files.txt"
 REFERENCE_DATASET_PATHS_FILE = "reference-files.txt"
 
+PATH_FILE_BUFFER_SIZE = 1000000
+
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
 
 # TODO increase to 32 in cloud
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 
 DATASET_BUFFER = 10000
 SHUFFLE_BUFFER_SIZE = 1000
@@ -41,17 +45,7 @@ LAMBDA_REC = 1.0
 LAMBDA_ADV = 0.1
 
 
-
-def get_os_join_fn(base_path):
-  def os_join(x):
-    x = x.decode('UTF-8')
-    return os.path.join(base_path, x)
-
-  return os_join
-
-
-def get_reference_image_path_fn(train_reference_path,
-                                train_reference_paths_dict):
+def get_reference_image_path_fn(train_reference_paths_dict):
   def get_reference_image_path(image_path):
     # Need to do this because when calling this function using tf.py_func,
     # the image_path is passed as bytes instead of string.
@@ -62,7 +56,7 @@ def get_reference_image_path_fn(train_reference_path,
     idx = np.random.randint(len(reference_paths))
     image_file_name = reference_paths[idx]
 
-    return os.path.join(train_reference_path, identity, image_file_name)
+    return os.path.join(identity, image_file_name)
 
   return get_reference_image_path
 
@@ -77,12 +71,10 @@ def fix_image_encoding(image):
   return image
 
 
-def create_reference_paths_dict(base_path):
+def create_reference_paths_dict(reference_dict_file_path):
   tf.logging.info('Creating reference paths dictionary')
   reference_dict = {}
-  reference_images_file = tf.gfile.GFile(
-    os.path.join(base_path, REFERENCE_DATASET_PATHS_FILE),
-    mode='r')
+  reference_images_file = tf.gfile.GFile(reference_dict_file_path, mode='r')
   for line in reference_images_file:
     split_line = line.rstrip('\n').split(':')
     identity = split_line[0]
@@ -222,19 +214,34 @@ def train(dataset, generator, discriminator, validation_images,
                  global_step)
 
 
-def get_load_and_preprocess_image_fn(base_path, reference_base_path,
+def get_read_images_from_fs_fn(dataset_fs, base_path):
+  def read_images_from_fs(image_path):
+    image_path = image_path.decode('UTF-8')
+    image_full_path = os.path.join(base_path, image_path)
+    with dataset_fs.open(image_full_path, 'rb') as img_file:
+      img_content = img_file.read()
+    return img_content
+
+  return read_images_from_fs
+
+
+def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
                                      reference_dict, masked=False):
   def load_and_preprocess_image(img_filename):
-    image_full_path = tf.py_func(get_os_join_fn(base_path), [img_filename],
-                                 tf.string)
-    image = tf.image.decode_image(tf.read_file(image_full_path), channels=3)
+    image_content = tf.py_func(
+      get_read_images_from_fs_fn(dataset_fs, base_path), [img_filename],
+      tf.string)
+    image = tf.image.decode_image(image_content, channels=3)
 
-    reference_image_path = tf.py_func(
-      get_reference_image_path_fn(reference_base_path, reference_dict),
-      [image_full_path], tf.string)
+    reference_image_filename = tf.py_func(
+      get_reference_image_path_fn(reference_dict),
+      [img_filename], tf.string)
+    reference_content = tf.py_func(
+      get_read_images_from_fs_fn(dataset_fs, reference_base_path),
+      [reference_image_filename],
+      tf.string)
 
-    reference = tf.image.decode_image(tf.read_file(reference_image_path),
-                                      channels=3)
+    reference = tf.image.decode_image(reference_content, channels=3)
 
     image = tf.image.resize_image_with_crop_or_pad(image, IMAGE_SIZE,
                                                    IMAGE_SIZE)
@@ -253,91 +260,123 @@ def get_load_and_preprocess_image_fn(base_path, reference_base_path,
   return load_and_preprocess_image
 
 
+def copy_dataset_to_mem_fs(mem_fs, dataset_zip_file_path):
+  tf.logging.info('Copying dataset to in-memory filesystem.')
+  dataset_path, dataset_zip_filename = os.path.split(dataset_zip_file_path)
+  with fs.open_fs(dataset_path) as host_fs:  # Could be local or GCS
+    with host_fs.open(dataset_zip_filename, 'rb') as zip_file:
+      with ZipFS(zip_file) as zip_fs:
+        fs.copy.copy_dir(zip_fs, '.', mem_fs, '.')
+
 def main(args):
+  # TODO update with zip logic
   DATASET_PATH = args.dataset_path
-  DATASET_TRAIN_PATH = os.path.join(DATASET_PATH, "train")
+  DATASET_TRAIN_PATH = "train"
   TRAIN_REAL_PATH = os.path.join(DATASET_TRAIN_PATH, "real")
   TRAIN_MASKED_PATH = os.path.join(DATASET_TRAIN_PATH, "masked")
   TRAIN_REFERENCE_PATH = os.path.join(DATASET_TRAIN_PATH, "reference")
 
-  REAL_IMAGES_PATHS_FILE = os.path.join(TRAIN_REAL_PATH,
+  if (args.dataset_path.endswith('.zip')):
+    tf.logging.info('Creating memory filesystem')
+    base_dataset_path, _ = os.path.split(args.dataset_path)
+    dataset_fs_path = 'mem://'
+  else:
+    tf.logging.info('Using base path as filesystem')
+    base_dataset_path = args.dataset_path
+    dataset_fs_path = args.dataset_path
+
+  REAL_IMAGES_PATHS_FILE = os.path.join(base_dataset_path,
                                         REAL_DATASET_PATHS_FILE)
-  MASKED_IMAGES_PATHS_FILE = os.path.join(TRAIN_MASKED_PATH,
+  MASKED_IMAGES_PATHS_FILE = os.path.join(base_dataset_path,
                                           MASKED_DATASET_PATHS_FILE)
+  REFERENCE_DICT_FILE = os.path.join(base_dataset_path,
+                                     REFERENCE_DATASET_PATHS_FILE)
 
-  train_reference_paths_dict = create_reference_paths_dict(
-    TRAIN_REFERENCE_PATH)
+  with fs.open_fs(dataset_fs_path) as dataset_fs:
+    if (dataset_fs_path.startswith('mem://')):
+      copy_dataset_to_mem_fs(dataset_fs, args.dataset_path)
 
-  # Real dataset
-  real_dataset = tf.data.TextLineDataset(REAL_IMAGES_PATHS_FILE)
+    train_reference_paths_dict = create_reference_paths_dict(
+      REFERENCE_DICT_FILE)
 
-  real_dataset = real_dataset.shuffle(SHUFFLE_BUFFER_SIZE)
+    # Real dataset
+    real_dataset = tf.data.TextLineDataset(REAL_IMAGES_PATHS_FILE,
+                                           buffer_size=PATH_FILE_BUFFER_SIZE)
 
-  real_dataset = real_dataset.map(
-    get_load_and_preprocess_image_fn(TRAIN_REAL_PATH, TRAIN_REFERENCE_PATH,
-                                     train_reference_paths_dict),
-    num_parallel_calls=PARALLEL_MAP_THREADS)
-  real_dataset = real_dataset.prefetch(BATCH_SIZE * 2)
-  real_dataset = real_dataset.batch(BATCH_SIZE, drop_remainder=True)
+    real_dataset = real_dataset.shuffle(SHUFFLE_BUFFER_SIZE)
 
-  # Masked dataset
-  masked_dataset = tf.data.TextLineDataset(MASKED_IMAGES_PATHS_FILE)
-  masked_dataset = masked_dataset.shuffle(SHUFFLE_BUFFER_SIZE)
+    real_dataset = real_dataset.map(
+      get_load_and_preprocess_image_fn(dataset_fs, TRAIN_REAL_PATH,
+                                       TRAIN_REFERENCE_PATH,
+                                       train_reference_paths_dict),
+      num_parallel_calls=PARALLEL_MAP_THREADS)
+    real_dataset = real_dataset.prefetch(BATCH_SIZE * 2)
+    real_dataset = real_dataset.batch(BATCH_SIZE, drop_remainder=True)
 
-  masked_dataset = masked_dataset.map(
-    get_load_and_preprocess_image_fn(TRAIN_MASKED_PATH, TRAIN_REFERENCE_PATH,
-                                     train_reference_paths_dict, masked=True),
-    num_parallel_calls=PARALLEL_MAP_THREADS)
-  masked_dataset = masked_dataset.prefetch(BATCH_SIZE * 2)
-  masked_dataset = masked_dataset.batch(BATCH_SIZE, drop_remainder=True)
+    # Masked dataset
+    masked_dataset = tf.data.TextLineDataset(MASKED_IMAGES_PATHS_FILE,
+                                             buffer_size=PATH_FILE_BUFFER_SIZE)
+    masked_dataset = masked_dataset.shuffle(SHUFFLE_BUFFER_SIZE)
 
-  train_dataset = tf.data.Dataset.zip((real_dataset, masked_dataset))
-  train_dataset = train_dataset.prefetch(1)
+    masked_dataset = masked_dataset.map(
+      get_load_and_preprocess_image_fn(dataset_fs, TRAIN_MASKED_PATH,
+                                       TRAIN_REFERENCE_PATH,
+                                       train_reference_paths_dict, masked=True),
+      num_parallel_calls=PARALLEL_MAP_THREADS)
+    masked_dataset = masked_dataset.prefetch(BATCH_SIZE * 2)
+    masked_dataset = masked_dataset.batch(BATCH_SIZE, drop_remainder=True)
 
-  # Validation images
-  VALIDATION_IDENTITIES = [
-    "0005366",
-    "0005367",
-    "0005370",
-    "0005371",
-    "0005373",
-    "0005376",
-    "0005378",
-    "0005379",
-    "0005381"
-  ]
+    train_dataset = tf.data.Dataset.zip((real_dataset, masked_dataset))
+    train_dataset = train_dataset.prefetch(1)
 
-  validation_images = []
-  validation_references = []
-  for identity in VALIDATION_IDENTITIES:
-    full_identity_dir = os.path.join(DATASET_PATH, "validation", identity)
+    # TODO Change to tf and fs
+    # Validation images
+    # VALIDATION_IDENTITIES = [
+    #   "0005366",
+    #   "0005367",
+    #   "0005370",
+    #   "0005371",
+    #   "0005373",
+    #   "0005376",
+    #   "0005378",
+    #   "0005379",
+    #   "0005381"
+    # ]
+    #
+    # validation_images = []
+    # validation_references = []
+    # for identity in VALIDATION_IDENTITIES:
+    #   full_identity_dir = os.path.join(DATASET_PATH, "validation", identity)
+    #
+    #   mask_image_file = tf.gfile.GFile(
+    #     os.path.join(full_identity_dir, "001.jpg"),
+    #     mode='rb')
+    #   mask_image = plt.imread(mask_image_file)
+    #
+    #   reference_image_file = tf.gfile.GFile(
+    #     os.path.join(full_identity_dir, "002.jpg"),
+    #     mode='rb')
+    #   reference_image = plt.imread(reference_image_file)
+    #
+    #   mask_image = fix_image_encoding(mask_image)
+    #   reference_image = fix_image_encoding(reference_image)
+    #
+    #   mask_image = resize(mask_image, (IMAGE_SIZE, IMAGE_SIZE))
+    #   reference_image = resize(reference_image, (IMAGE_SIZE, IMAGE_SIZE))
+    #
+    #   validation_images.append(mask_image)
+    #   validation_references.append(reference_image)
+    #
+    # validation_images = np.array(validation_images).astype('float32')
+    # validation_references = np.array(validation_references).astype('float32')
+    validation_images = None
+    validation_references = None
 
-    mask_image_file = tf.gfile.GFile(
-      os.path.join(full_identity_dir, "001.jpg"),
-      mode='rb')
-    mask_image = plt.imread(mask_image_file)
 
-    reference_image_file = tf.gfile.GFile(
-      os.path.join(full_identity_dir, "002.jpg"),
-      mode='rb')
-    reference_image = plt.imread(reference_image_file)
+    generator, discriminator = model.make_models()
 
-    mask_image = fix_image_encoding(mask_image)
-    reference_image = fix_image_encoding(reference_image)
-
-    mask_image = resize(mask_image, (IMAGE_SIZE, IMAGE_SIZE))
-    reference_image = resize(reference_image, (IMAGE_SIZE, IMAGE_SIZE))
-
-    validation_images.append(mask_image)
-    validation_references.append(reference_image)
-
-  validation_images = np.array(validation_images).astype('float32')
-  validation_references = np.array(validation_references).astype('float32')
-
-  generator, discriminator = model.make_models()
-
-  train(train_dataset, generator, discriminator,
-        validation_images, validation_references, args.experiment_dir)
+    train(train_dataset, generator, discriminator,
+          validation_images, validation_references, args.experiment_dir)
 
 
 if __name__ == "__main__":
@@ -345,7 +384,7 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument(
     '--dataset_path',
-    help='GCS or local path to the dataset.',
+    help='GCS or local path to the dataset. If ends with zip extension, will load dataset in memory-filesystem.',
     default='gs://first-ml-project-222122-mlengine/data')
   parser.add_argument(
     '--experiment_dir',

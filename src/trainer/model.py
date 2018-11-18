@@ -200,13 +200,13 @@ def discriminator_loss(real_output, generated_output, lambda_adv):
 def make_models():
   gen_encoder, disc_encoder = make_encoders()
 
-  gen_encoder.summary()
-  disc_encoder.summary()
+  # gen_encoder.summary()
+  # disc_encoder.summary()
 
   generator = make_generator_model(gen_encoder)
   discriminator = make_discriminator_model(disc_encoder)
 
-  generator.summary()
-  discriminator.summary()
+  # generator.summary()
+  # discriminator.summary()
 
   return generator, discriminator

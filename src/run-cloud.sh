@@ -5,7 +5,9 @@ JOB_NAME="casia_vgg_$now"
 BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 REGION="us-central1"
 EXPERIMENT_DIR="$BASE_DIR/$JOB_NAME"
-DATASET_PATH="gs://two-face-inpainting-mlengine/data"
+# DATASET_PATH="gs://two-face-inpainting-mlengine/data"
+DATASET_PATH="gs://two-face-inpainting-mlengine/data/data.zip"
+
 
 echo $EXPERIMENT_DIR
 
