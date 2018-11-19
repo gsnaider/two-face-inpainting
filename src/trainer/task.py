@@ -26,9 +26,6 @@ PATH_FILE_BUFFER_SIZE = 1000000
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
 
-# TODO increase to 32 in cloud
-BATCH_SIZE = 16
-
 DATASET_BUFFER = 10000
 SHUFFLE_BUFFER_SIZE = 1000
 PARALLEL_MAP_THREADS = 16
@@ -170,15 +167,14 @@ def train(dataset, generator, discriminator, validation_images,
   iterator = dataset.make_one_shot_iterator()
 
   train_batch = iterator.get_next()
-  (full_images, full_reference_images) = train_batch[0]
+  full_images = train_batch[0]
   (masked_images, unmasked_images, masked_reference_images) = train_batch[1]
 
   generated_patches = generator([masked_images, masked_reference_images],
                                 training=True)
   generated_images = patch_image(generated_patches, masked_images)
 
-  real_output = discriminator([full_images, full_reference_images],
-                              training=True)
+  real_output = discriminator(full_images, training=True)
   generated_output = discriminator(
     [generated_images, masked_reference_images], training=True)
 
@@ -233,30 +229,28 @@ def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
       get_read_images_from_fs_fn(dataset_fs, base_path), [img_filename],
       tf.string)
     image = tf.image.decode_image(image_content, channels=3)
-
-    reference_image_filename = tf.py_func(
-      get_reference_image_path_fn(reference_dict),
-      [img_filename], tf.string)
-    reference_content = tf.py_func(
-      get_read_images_from_fs_fn(dataset_fs, reference_base_path),
-      [reference_image_filename],
-      tf.string)
-
-    reference = tf.image.decode_image(reference_content, channels=3)
-
     image = tf.image.resize_image_with_crop_or_pad(image, IMAGE_SIZE,
                                                    IMAGE_SIZE)
-    reference = tf.image.resize_image_with_crop_or_pad(reference, IMAGE_SIZE,
-                                                       IMAGE_SIZE)
-
     image = tf.image.convert_image_dtype(image, tf.float32)
-    reference = tf.image.convert_image_dtype(reference, tf.float32)
 
     if masked:
+      reference_image_filename = tf.py_func(
+        get_reference_image_path_fn(reference_dict),
+        [img_filename], tf.string)
+      reference_content = tf.py_func(
+        get_read_images_from_fs_fn(dataset_fs, reference_base_path),
+        [reference_image_filename],
+        tf.string)
+
+      reference = tf.image.decode_image(reference_content, channels=3)
+      reference = tf.image.resize_image_with_crop_or_pad(reference, IMAGE_SIZE,
+                                                         IMAGE_SIZE)
+      reference = tf.image.convert_image_dtype(reference, tf.float32)
+
       mask_image = get_mask_fn(IMAGE_SIZE, PATCH_SIZE)(image)
       return mask_image, image, reference
     else:
-      return image, reference
+      return image
 
   return load_and_preprocess_image
 
@@ -270,6 +264,8 @@ def copy_dataset_to_mem_fs(mem_fs, dataset_zip_file_path):
         fs.copy.copy_dir(zip_fs, '.', mem_fs, '.')
 
 def main(args):
+  BATCH_SIZE = args.batch_size
+
   DATASET_PATH = args.dataset_path
   DATASET_TRAIN_PATH = "train"
   TRAIN_REAL_PATH = os.path.join(DATASET_TRAIN_PATH, "real")
@@ -390,6 +386,11 @@ if __name__ == "__main__":
   parser.add_argument(
     '--experiment_dir',
     help='GCS or local path where checkpoints will be stored.')
+  parser.add_argument(
+    '--batch_size',
+    type=int,
+    help='Batch size for training.',
+    default=16)
   parser.add_argument(
     '--verbosity',
     choices=['DEBUG', 'ERROR', 'FATAL', 'INFO', 'WARN'],

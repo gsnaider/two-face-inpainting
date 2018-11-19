@@ -138,43 +138,23 @@ def make_discriminator_model(disc_encoder):
   image_encoding = disc_encoder(image)
   # 4x4x512
 
-  image_encoding = tf.keras.layers.Conv2D(64, (1, 1),
+  image_encoding = tf.keras.layers.Conv2D(128, (1, 1),
                                           strides=(1, 1),
                                           padding='same',
                                           input_shape=(4, 4, 512))(
     image_encoding)
   image_encoding = tf.keras.layers.BatchNormalization()(image_encoding)
   image_encoding = tf.keras.layers.LeakyReLU()(image_encoding)
-  # 4x4x64
+  # 4x4x128
 
   image_encoding = tf.keras.layers.Flatten()(image_encoding)
-  # 1024
-
-  reference_image = tf.keras.Input(shape=(128, 128, 3,), name='reference_image')
-  reference_encoding = disc_encoder(reference_image)
-  # 4x4x512
-
-  reference_encoding = tf.keras.layers.Conv2D(64, (1, 1),
-                                              strides=(1, 1),
-                                              padding='same',
-                                              input_shape=(4, 4, 512))(
-    reference_encoding)
-  reference_encoding = tf.keras.layers.BatchNormalization()(reference_encoding)
-  reference_encoding = tf.keras.layers.LeakyReLU()(reference_encoding)
-  # 4x4x64
-
-  reference_encoding = tf.keras.layers.Flatten()(reference_encoding)
-  # 1024
-
-  encoding = tf.keras.layers.concatenate([image_encoding, reference_encoding],
-                                         axis=-1)
   # 2048
 
   # Classifier
-  encoding = tf.keras.layers.Dense(128, activation=tf.nn.leaky_relu)(encoding)
-  logits = tf.keras.layers.Dense(1)(encoding)
+  image_encoding = tf.keras.layers.Dense(128, activation=tf.nn.leaky_relu)(image_encoding)
+  logits = tf.keras.layers.Dense(1)(image_encoding)
 
-  return tf.keras.Model(inputs=[image, reference_image], outputs=logits)
+  return tf.keras.Model(inputs=image, outputs=logits)
 
 def reconstruction_loss(original_image, patched_image):
   return tf.nn.l2_loss(original_image - patched_image) * 2.0 / (128.0 * 128.0)

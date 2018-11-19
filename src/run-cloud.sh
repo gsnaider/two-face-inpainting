@@ -1,7 +1,8 @@
 #!/bin/bash
 
 now=$(date +"%Y%m%d_%H%M%S")
-JOB_NAME="casia_vgg_$now"
+#JOB_NAME="casia_vgg_$now"
+JOB_NAME="casia_vgg_rec_discriminator_only"
 BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 REGION="us-central1"
 EXPERIMENT_DIR="$BASE_DIR/$JOB_NAME"
@@ -22,4 +23,5 @@ gcloud ml-engine jobs submit training $JOB_NAME \
     -- \
     --dataset_path $DATASET_PATH \
     --experiment_dir $EXPERIMENT_DIR \
+    --batch_size 32 \
     --verbosity "INFO"
