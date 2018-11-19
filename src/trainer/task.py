@@ -1,6 +1,6 @@
 import tensorflow as tf
 import argparse
-import fs
+import fss
 from fs.zipfs import ZipFS
 
 # To avoid getting the 'No module named _tkinter, please install the python-tk package' error
@@ -39,9 +39,13 @@ GEN_LEARNING_RATE = 1e-4
 DISC_LEARNING_RATE = 1e-4
 
 LAMBDA_REC = 1.0
-LAMBDA_ADV_GEN = 0.0
-LAMBDA_ADV_DISC = 1.0
 
+# 0 or 1 depending if we want to train the local/global GANs on the generator
+LAMBDA_ADV_LOCAL = 0.0
+LAMBDA_ADV_GLOBAL = 0.0
+
+LAMBDA_LOCAL_DISC = 1.0
+LAMBDA_GLOBAL_DISC = 1.0
 
 def get_reference_image_path_fn(train_reference_paths_dict):
   def get_reference_image_path(image_path):
@@ -112,6 +116,12 @@ def get_mask_fn(img_size, patch_size, use_batch=False):
   return mask_fn
 
 
+def extract_patch(image):
+  patch_start = (IMAGE_SIZE - PATCH_SIZE) // 2
+  patch_end = patch_start + PATCH_SIZE
+  return image[:,patch_start:patch_end, patch_start:patch_end, :]
+
+
 def patch_image(patch, image):
   """
   Apply the given patch to the image.
@@ -145,21 +155,27 @@ def generate_images(generator, images, reference_images):
   return generated_images
 
 
-def train_step(sess, gen_optimizer, disc_optimizer, gen_loss, disc_loss,
+def train_step(sess, gen_optimizer, local_disc_optimizer,
+               global_disc_optimizer, gen_loss, local_disc_loss,
+               global_disc_loss,
                global_step):
   _, gen_loss_value = sess.run([gen_optimizer, gen_loss])
-  _, disc_loss_value, step_value = sess.run(
-    [disc_optimizer, disc_loss, global_step])
+  _, local_disc_loss_value = sess.run(
+    [local_disc_optimizer, local_disc_loss])
+  _, global_disc_loss_value, step_value = sess.run(
+    [global_disc_optimizer, global_disc_loss, global_step])
 
-  # Divide by two because we increment the global_step twice per each train_step.
-  if (step_value // 2) % (BATCHES_PER_PRINT // 2) == 0:
+  # Divide by 3 because we increment the global_step 3 times per each train_step.
+  if (step_value // 3) % (BATCHES_PER_PRINT // 3) == 0:
     tf.logging.info(
-      "Step: {} - Gen_loss: {} - Disc_loss: {}".format(step_value,
-                                                       gen_loss_value,
-                                                       disc_loss_value))
+      "Step: {} - Gen_loss: {} - Local_disc_loss: {} - Global_disc_loss: {}".format(
+        step_value,
+        gen_loss_value,
+        local_disc_loss_value,
+        global_disc_loss_value))
 
 
-def train(dataset, generator, discriminator, validation_images,
+def train(dataset, generator, local_discriminator, global_discriminator, validation_images,
           validation_references, experiment_dir):
   global_step = tf.train.get_or_create_global_step()
 
@@ -174,25 +190,43 @@ def train(dataset, generator, discriminator, validation_images,
                                 training=True)
   generated_images = patch_image(generated_patches, masked_images)
 
-  real_output = discriminator(full_images, training=True)
-  generated_output = discriminator(
-    [generated_images, masked_reference_images], training=True)
+  # Local discriminator
+  local_real_output = local_discriminator(extract_patch(full_images),
+                                          training=True)
+  local_generated_output = local_discriminator(generated_patches, training=True)
+  local_disc_loss = model.discriminator_loss(local_real_output,
+                                             local_generated_output,
+                                             LAMBDA_LOCAL_DISC)
 
+  # Global discriminator
+  global_real_output = global_discriminator(full_images, training=True)
+  global_generated_output = global_discriminator(generated_images,
+                                                 training=True)
+  global_disc_loss = model.discriminator_loss(global_real_output,
+                                              global_generated_output,
+                                              LAMBDA_GLOBAL_DISC)
+
+  # Generator
   gen_loss = model.generator_loss(unmasked_images, generated_images,
-                                  generated_output, LAMBDA_REC,
-                                  LAMBDA_ADV_GEN)
-  disc_loss = model.discriminator_loss(real_output, generated_output,
-                                       LAMBDA_ADV_DISC)
+                                  local_generated_output,
+                                  global_generated_output, LAMBDA_REC,
+                                  LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL)
 
   gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
     gen_loss, var_list=generator.variables,
     global_step=global_step)
-  disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
-    disc_loss, var_list=discriminator.variables,
+
+  local_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+    local_disc_loss, var_list=local_discriminator.variables,
+    global_step=global_step)
+
+  global_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+    global_disc_loss, var_list=global_discriminator.variables,
     global_step=global_step)
 
   tf.summary.scalar('gen_loss', gen_loss)
-  tf.summary.scalar('disc_loss', disc_loss)
+  tf.summary.scalar('local_disc_loss', local_disc_loss)
+  tf.summary.scalar('global_disc_loss', global_disc_loss)
   tf.summary.image('generated_train_images', generated_images, max_outputs=9)
 
   # TODO see why validation images are not being generated correctly.
@@ -207,7 +241,9 @@ def train(dataset, generator, discriminator, validation_images,
           checkpoint_dir=os.path.join(experiment_dir, "train"),
           hooks=hooks) as sess:
     while not sess.should_stop():
-      train_step(sess, gen_optimizer, disc_optimizer, gen_loss, disc_loss,
+      train_step(sess, gen_optimizer, local_disc_optimizer,
+                 global_disc_optimizer, gen_loss, local_disc_loss,
+                 global_disc_loss,
                  global_step)
 
 
@@ -370,9 +406,9 @@ def main(args):
     validation_references = None
 
 
-    generator, discriminator = model.make_models()
+    generator, local_discriminator, global_discriminator = model.make_models()
 
-    train(train_dataset, generator, discriminator,
+    train(train_dataset, generator, local_discriminator, global_discriminator,
           validation_images, validation_references, args.experiment_dir)
 
 
