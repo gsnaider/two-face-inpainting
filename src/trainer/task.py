@@ -1,6 +1,6 @@
 import tensorflow as tf
 import argparse
-import fss
+import fs
 from fs.zipfs import ZipFS
 
 # To avoid getting the 'No module named _tkinter, please install the python-tk package' error

@@ -26,6 +26,7 @@ class ChannelWiseFCLayer(tf.keras.layers.Layer):
     return output_reshape
 
 
+# TODO maybe build the gen encoder in the make_generator_model function
 def make_encoders():
   """Returns the gen and disc encoders."""
 
@@ -36,6 +37,7 @@ def make_encoders():
   vgg16.trainable = False
   disc_encoder = vgg16
 
+  # Generator encoder
   # Keep only first 10 layers of vgg for the generator
   gen_encoder = tf.keras.layers.Conv2D(512, (3, 3),
                                        strides=(1, 1),
@@ -58,7 +60,7 @@ def make_encoders():
   gen_encoder = tf.keras.Model(inputs=vgg16.inputs,
                                outputs=gen_encoder)
 
-  for layer in gen_encoder.layers[:9]:
+  for layer in gen_encoder.layers[:10]:
     layer.trainable = False
 
   return gen_encoder, disc_encoder
@@ -177,20 +179,48 @@ def make_local_discriminator_model():
 
 
 
-# TODO tomar menos layers de VGG y entrenar mas convolutions
 def make_global_discriminator_model(encoder):
-  image = tf.keras.Input(shape=(128, 128, 3,), name='image')
-  image_encoding = encoder(image)
-  # 4x4x512
 
-  image_encoding = tf.keras.layers.Conv2D(128, (3, 3),
-                                          strides=(1, 1),
-                                          padding='same',
-                                          input_shape=(4, 4, 512))(
-    image_encoding)
-  image_encoding = tf.keras.layers.BatchNormalization()(image_encoding)
-  image_encoding = tf.keras.layers.LeakyReLU()(image_encoding)
-  # 4x4x128
+  image = tf.keras.Input(shape=(128, 128, 3,), name='image')
+
+  # Take the first 10 layers of vgg
+  disc_encoder = tf.keras.layers.Conv2D(256, (3, 3),
+                                        strides=(1, 1),
+                                        padding='same')(encoder.layers[10].output)
+  # 16x16x256
+  disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder)
+  disc_encoder = tf.keras.layers.LeakyReLU()(disc_encoder)
+
+  disc_encoder = tf.keras.layers.Conv2D(128, (3, 3),
+                                        strides=(1, 1),
+                                        padding='same')(disc_encoder)
+  disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder)
+  disc_encoder = tf.keras.layers.LeakyReLU()(disc_encoder)
+  # 16x16x128
+
+  disc_encoder = tf.keras.layers.MaxPool2D(pool_size=(2, 2), strides=(2, 2))(
+    disc_encoder)
+  # 8x8x128
+
+  disc_encoder = tf.keras.layers.Conv2D(64, (3, 3),
+                                        strides=(1, 1),
+                                        padding='same')(disc_encoder)
+  disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder)
+  disc_encoder = tf.keras.layers.LeakyReLU()(disc_encoder)
+  # 8x8x64
+
+  disc_encoder = tf.keras.layers.MaxPool2D(pool_size=(2, 2), strides=(2, 2))(
+    disc_encoder)
+  # 4x4x64
+
+  disc_encoder = tf.keras.Model(inputs=encoder.inputs,
+                               outputs=disc_encoder)
+
+  for layer in disc_encoder.layers[:10]:
+    layer.trainable = False
+
+  image_encoding = disc_encoder(image)
+  # 4x4x64
 
   image_encoding = tf.keras.layers.Flatten()(image_encoding)
   # 2048
