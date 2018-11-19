@@ -2,12 +2,12 @@
 
 now=$(date +"%Y%m%d_%H%M%S")
 #JOB_NAME="casia_vgg_$now"
-JOB_NAME="casia_vgg_rec_discriminator_only"
+JOB_NAME="casia_vgg_rec_only_with_local_global_disc_$now"
 BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 REGION="us-central1"
 EXPERIMENT_DIR="$BASE_DIR/$JOB_NAME"
-DATASET_PATH="gs://two-face-inpainting-mlengine/data"
-# DATASET_PATH="gs://two-face-inpainting-mlengine/data/data.zip"
+# DATASET_PATH="gs://two-face-inpainting-mlengine/data"
+DATASET_PATH="gs://two-face-inpainting-mlengine/data/data.zip"
 
 
 echo $EXPERIMENT_DIR
