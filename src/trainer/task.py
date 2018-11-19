@@ -42,7 +42,8 @@ GEN_LEARNING_RATE = 1e-4
 DISC_LEARNING_RATE = 1e-4
 
 LAMBDA_REC = 1.0
-LAMBDA_ADV = 0.1
+LAMBDA_ADV_GEN = 0.0
+LAMBDA_ADV_DISC = 1.0
 
 
 def get_reference_image_path_fn(train_reference_paths_dict):
@@ -183,9 +184,9 @@ def train(dataset, generator, discriminator, validation_images,
 
   gen_loss = model.generator_loss(unmasked_images, generated_images,
                                   generated_output, LAMBDA_REC,
-                                  LAMBDA_ADV)
+                                  LAMBDA_ADV_GEN)
   disc_loss = model.discriminator_loss(real_output, generated_output,
-                                       LAMBDA_ADV)
+                                       LAMBDA_ADV_DISC)
 
   gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
     gen_loss, var_list=generator.variables,
@@ -269,7 +270,6 @@ def copy_dataset_to_mem_fs(mem_fs, dataset_zip_file_path):
         fs.copy.copy_dir(zip_fs, '.', mem_fs, '.')
 
 def main(args):
-  # TODO update with zip logic
   DATASET_PATH = args.dataset_path
   DATASET_TRAIN_PATH = "train"
   TRAIN_REAL_PATH = os.path.join(DATASET_TRAIN_PATH, "real")
@@ -284,6 +284,7 @@ def main(args):
     tf.logging.info('Using base path as filesystem')
     base_dataset_path = args.dataset_path
     dataset_fs_path = args.dataset_path
+  tf.logging.info("Filesystem: {}".format(dataset_fs_path))
 
   REAL_IMAGES_PATHS_FILE = os.path.join(base_dataset_path,
                                         REAL_DATASET_PATHS_FILE)

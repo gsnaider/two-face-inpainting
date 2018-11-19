@@ -5,8 +5,8 @@ JOB_NAME="casia_vgg_$now"
 BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 REGION="us-central1"
 EXPERIMENT_DIR="$BASE_DIR/$JOB_NAME"
-# DATASET_PATH="gs://two-face-inpainting-mlengine/data"
-DATASET_PATH="gs://two-face-inpainting-mlengine/data/data.zip"
+DATASET_PATH="gs://two-face-inpainting-mlengine/data"
+# DATASET_PATH="gs://two-face-inpainting-mlengine/data/data.zip"
 
 
 echo $EXPERIMENT_DIR
@@ -18,6 +18,7 @@ gcloud ml-engine jobs submit training $JOB_NAME \
     --region $REGION \
     --scale-tier BASIC_GPU \
     --runtime-version 1.10 \
+    --python-version 3.5 \
     -- \
     --dataset_path $DATASET_PATH \
     --experiment_dir $EXPERIMENT_DIR \
