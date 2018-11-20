@@ -212,17 +212,26 @@ def train(dataset, generator, local_discriminator, global_discriminator, validat
                                   global_generated_output, LAMBDA_REC,
                                   LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL)
 
+  # TODO check that this is the correct way to use optimizer with keras.
   gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
     gen_loss, var_list=generator.variables,
     global_step=global_step)
 
+  # TODO check that this works
+  # tf.logging.info('Generator variables {}'.format([v.name for v in generator.variables]))
+
+  # TODO Seems that the disc optimizer is propagating changes to the generator.
   local_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
     local_disc_loss, var_list=local_discriminator.variables,
     global_step=global_step)
 
+  # tf.logging.info('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
+
   global_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
     global_disc_loss, var_list=global_discriminator.variables,
     global_step=global_step)
+
+  # tf.logging.info('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
