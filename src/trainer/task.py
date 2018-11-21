@@ -44,8 +44,8 @@ LAMBDA_REC = 1.0
 LAMBDA_ADV_LOCAL = 0.0
 LAMBDA_ADV_GLOBAL = 0.0
 
-LAMBDA_LOCAL_DISC = 1.0
-LAMBDA_GLOBAL_DISC = 1.0
+LAMBDA_LOCAL_DISC = 0.0
+LAMBDA_GLOBAL_DISC = 0.0
 
 def get_reference_image_path_fn(train_reference_paths_dict):
   def get_reference_image_path(image_path):
@@ -175,6 +175,11 @@ def train_step(sess, gen_optimizer, local_disc_optimizer,
         global_disc_loss_value))
 
 
+def expand_patches(patches):
+  paddings = tf.constant([[0, 0], [8, 8], [8, 8], [0, 0]])
+  return tf.pad(patches, paddings, "CONSTANT")
+
+
 def train(dataset, generator, local_discriminator, global_discriminator, validation_images,
           validation_references, experiment_dir):
   global_step = tf.train.get_or_create_global_step()
@@ -188,12 +193,18 @@ def train(dataset, generator, local_discriminator, global_discriminator, validat
 
   generated_patches = generator([masked_images, masked_reference_images],
                                 training=True)
+
   generated_images = patch_image(generated_patches, masked_images)
 
   # Local discriminator
-  local_real_output = local_discriminator(extract_patch(full_images),
+
+  # Expand patches to because in tf <= 1.10 VGG min input size is 48x48
+  expanded_real_patches = expand_patches(extract_patch(full_images))
+  expanded_gen_patches = expand_patches(generated_patches)
+
+  local_real_output = local_discriminator(expanded_real_patches,
                                           training=True)
-  local_generated_output = local_discriminator(generated_patches, training=True)
+  local_generated_output = local_discriminator(expanded_gen_patches, training=True)
   local_disc_loss = model.discriminator_loss(local_real_output,
                                              local_generated_output,
                                              LAMBDA_LOCAL_DISC)
@@ -237,6 +248,7 @@ def train(dataset, generator, local_discriminator, global_discriminator, validat
   tf.summary.scalar('local_disc_loss', local_disc_loss)
   tf.summary.scalar('global_disc_loss', global_disc_loss)
   tf.summary.image('generated_train_images', generated_images, max_outputs=9)
+
 
   # TODO see why validation images are not being generated correctly.
   # generated_validation_images = generate_images(generator,

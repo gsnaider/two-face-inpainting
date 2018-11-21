@@ -3,6 +3,8 @@ import tensorflow as tf
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
 
+# In tf <= 1.10, min input size for vgg is 48x48
+EXPANDED_PATCH_SIZE = 48
 
 class ChannelWiseFCLayer(tf.keras.layers.Layer):
   def __init__(self):
@@ -138,27 +140,29 @@ def make_generator_model(gen_encoder):
 
 
 def make_local_discriminator_model():
-  patch = tf.keras.Input(shape=(PATCH_SIZE, PATCH_SIZE, 3,), name='patch')
+  patch = tf.keras.Input(shape=(EXPANDED_PATCH_SIZE, EXPANDED_PATCH_SIZE, 3,),
+                         name='patch')
 
   vgg16 = tf.keras.applications.vgg16.VGG16(include_top=False,
                                             weights='imagenet',
                                             input_tensor=None,
                                             input_shape=(
-                                            PATCH_SIZE, PATCH_SIZE, 3))
+                                              EXPANDED_PATCH_SIZE,
+                                              EXPANDED_PATCH_SIZE, 3))
   encoder = tf.keras.Model(inputs=vgg16.inputs,
                            outputs=vgg16.layers[10].output)
   encoder.trainable = False
 
   encoding = encoder(patch)
-  #4x4x256
+  #6x6x256
 
   encoding = tf.keras.layers.Conv2D(128, (3, 3),
                                           strides=(1, 1),
                                           padding='same',
-                                          input_shape=(4, 4, 256))(encoding)
+                                          input_shape=(6, 6, 256))(encoding)
   encoding = tf.keras.layers.BatchNormalization()(encoding)
   encoding = tf.keras.layers.LeakyReLU()(encoding)
-  # 4x4x128
+  # 6x6x128
 
   encoding = tf.keras.layers.Conv2D(64, (3, 3),
                                           strides=(1, 1),
@@ -166,7 +170,11 @@ def make_local_discriminator_model():
                                           input_shape=(4, 4, 128))(encoding)
   encoding = tf.keras.layers.BatchNormalization()(encoding)
   encoding = tf.keras.layers.LeakyReLU()(encoding)
-  # 4x4x64
+  # 6x6x64
+
+  encoding = tf.keras.layers.MaxPool2D(pool_size=(2, 2), strides=(2, 2))(
+    encoding)
+  # 3x3x64
 
   encoding = tf.keras.layers.Flatten()(encoding)
   # 1024
