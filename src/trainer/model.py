@@ -27,23 +27,27 @@ class ChannelWiseFCLayer(tf.keras.layers.Layer):
                                 [-1, self.height, self.width, self.n_feat_map])
     return output_reshape
 
-
-# TODO maybe build the gen encoder in the make_generator_model function
-def make_encoders():
-  """Returns the gen and disc encoders."""
-
+def make_generator_encoder():
   vgg16 = tf.keras.applications.vgg16.VGG16(include_top=False,
                                             weights='imagenet',
                                             input_tensor=None,
                                             input_shape=(128, 128, 3))
+
   vgg16.trainable = False
-  disc_encoder = vgg16
+
+  input_encoder = tf.keras.Model(inputs=vgg16.inputs,
+                               outputs=vgg16.layers[10].output)
+
+  for layer in input_encoder.layers[:10]:
+    layer.trainable = False
 
   # Generator encoder
   # Keep only first 10 layers of vgg for the generator
   gen_encoder = tf.keras.layers.Conv2D(512, (3, 3),
                                        strides=(1, 1),
-                                       padding='same')(vgg16.layers[10].output)
+                                       padding='same')(
+    input_encoder.layers[-1].output)
+
   # 16x16x512
   gen_encoder = tf.keras.layers.BatchNormalization()(gen_encoder)
   gen_encoder = tf.keras.layers.LeakyReLU()(gen_encoder)
@@ -59,22 +63,19 @@ def make_encoders():
     gen_encoder)
   # 8x8x512
 
-  gen_encoder = tf.keras.Model(inputs=vgg16.inputs,
-                               outputs=gen_encoder)
+  return tf.keras.Model(inputs=input_encoder.inputs, outputs=gen_encoder)
 
-  for layer in gen_encoder.layers[:10]:
-    layer.trainable = False
+def make_generator_model():
 
-  return gen_encoder, disc_encoder
+  mask_encoder = make_generator_encoder()
+  reference_encoder = make_generator_encoder()
 
-
-def make_generator_model(gen_encoder):
   masked_image = tf.keras.Input(shape=(128, 128, 3,), name='masked_image')
-  masked_encoding = gen_encoder(masked_image)
+  masked_encoding = mask_encoder(masked_image)
   # 8x8x512
 
   reference_image = tf.keras.Input(shape=(128, 128, 3,), name='reference_image')
-  reference_encoding = gen_encoder(reference_image)
+  reference_encoding = reference_encoder(reference_image)
   # 8x8x512
 
   encoding = tf.keras.layers.concatenate([masked_encoding, reference_encoding],
@@ -187,14 +188,31 @@ def make_local_discriminator_model():
 
 
 
-def make_global_discriminator_model(encoder):
+def make_global_discriminator_model():
+
+
+  vgg16 = tf.keras.applications.vgg16.VGG16(include_top=False,
+                                            weights='imagenet',
+                                            input_tensor=None,
+                                            input_shape=(128, 128, 3))
+  vgg16.trainable = False
+
+  disc_encoder = tf.keras.Model(inputs=vgg16.inputs,
+                               outputs=vgg16.layers[10].output)
+
+  for layer in disc_encoder.layers[:10]:
+    layer.trainable = False
 
   image = tf.keras.Input(shape=(128, 128, 3,), name='image')
+
+  disc_encoder = disc_encoder(image)
+  # 4x4x64
+
 
   # Take the first 10 layers of vgg
   disc_encoder = tf.keras.layers.Conv2D(256, (3, 3),
                                         strides=(1, 1),
-                                        padding='same')(encoder.layers[10].output)
+                                        padding='same')(disc_encoder)
   # 16x16x256
   disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder)
   disc_encoder = tf.keras.layers.LeakyReLU()(disc_encoder)
@@ -221,16 +239,8 @@ def make_global_discriminator_model(encoder):
     disc_encoder)
   # 4x4x64
 
-  disc_encoder = tf.keras.Model(inputs=encoder.inputs,
-                               outputs=disc_encoder)
 
-  for layer in disc_encoder.layers[:10]:
-    layer.trainable = False
-
-  image_encoding = disc_encoder(image)
-  # 4x4x64
-
-  image_encoding = tf.keras.layers.Flatten()(image_encoding)
+  image_encoding = tf.keras.layers.Flatten()(disc_encoder)
   # 2048
 
   # Classifier
@@ -242,7 +252,8 @@ def make_global_discriminator_model(encoder):
 
 
 def reconstruction_loss(original_image, patched_image):
-  return tf.nn.l2_loss(original_image - patched_image) * 2.0 / (128.0 * 128.0)
+  return tf.nn.l2_loss(original_image - patched_image) * 2.0 / (
+            128.0 * 128.0 * 3.0)
 
 
 def generator_adversarial_loss(generated_output):
@@ -276,11 +287,10 @@ def discriminator_loss(real_output, generated_output, lambda_adv):
 
 
 def make_models():
-  gen_encoder, global_disc_encoder = make_encoders()
 
-  generator = make_generator_model(gen_encoder)
+  generator = make_generator_model()
   local_discriminator = make_local_discriminator_model()
-  global_discriminator = make_global_discriminator_model(global_disc_encoder)
+  global_discriminator = make_global_discriminator_model()
 
   generator.summary()
   local_discriminator.summary()

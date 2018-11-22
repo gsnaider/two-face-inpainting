@@ -39,13 +39,11 @@ GEN_LEARNING_RATE = 1e-4
 DISC_LEARNING_RATE = 1e-4
 
 LAMBDA_REC = 1.0
+LAMBDA_ADV_LOCAL = 0.0 # 0.01
+LAMBDA_ADV_GLOBAL = 0.0 # 0.01
 
-# 0 or 1 depending if we want to train the local/global GANs on the generator
-LAMBDA_ADV_LOCAL = 0.0
-LAMBDA_ADV_GLOBAL = 0.0
-
-LAMBDA_LOCAL_DISC = 0.0
-LAMBDA_GLOBAL_DISC = 0.0
+LAMBDA_LOCAL_DISC = 0.0 # 0.1
+LAMBDA_GLOBAL_DISC = 0.0 # 0.1
 
 def get_reference_image_path_fn(train_reference_paths_dict):
   def get_reference_image_path(image_path):
