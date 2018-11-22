@@ -253,11 +253,17 @@ def generator_adversarial_loss(generated_output):
 def generator_loss(original_image, patched_image, local_generated_output,
                    global_generated_output, lambda_rec,
                    lambda_adv_local, lambda_adv_global):
-  return (lambda_rec * reconstruction_loss(original_image, patched_image) +
-          lambda_adv_local * generator_adversarial_loss(
-            local_generated_output) +
-          lambda_adv_global * generator_adversarial_loss(
-            global_generated_output))
+  rec_loss = lambda_rec * reconstruction_loss(original_image, patched_image)
+  local_adv_loss = lambda_adv_local * generator_adversarial_loss(
+    local_generated_output)
+  global_adv_loss = lambda_adv_global * generator_adversarial_loss(
+    global_generated_output)
+
+  tf.summary.scalar('rec_loss', rec_loss)
+  tf.summary.scalar('local_adv_loss', local_adv_loss)
+  tf.summary.scalar('global_adv_loss', global_adv_loss)
+
+  return rec_loss + local_adv_loss + global_adv_loss
 
 
 def discriminator_loss(real_output, generated_output, lambda_adv):
