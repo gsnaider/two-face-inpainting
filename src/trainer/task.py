@@ -41,6 +41,7 @@ DISC_LEARNING_RATE = 1e-4
 LAMBDA_REC = 1.0
 LAMBDA_ADV_LOCAL = 0.0 # 0.01
 LAMBDA_ADV_GLOBAL = 0.0 # 0.01
+LAMBDA_ID = 0.0 # 0.1
 
 LAMBDA_LOCAL_DISC = 0.0 # 0.1
 LAMBDA_GLOBAL_DISC = 0.0 # 0.1
@@ -178,7 +179,7 @@ def expand_patches(patches):
   return tf.pad(patches, paddings, "CONSTANT")
 
 
-def train(dataset, generator, local_discriminator, global_discriminator, validation_images,
+def train(dataset, generator, local_discriminator, global_discriminator, facenet, validation_images,
           validation_references, experiment_dir):
   global_step = tf.train.get_or_create_global_step()
 
@@ -218,8 +219,8 @@ def train(dataset, generator, local_discriminator, global_discriminator, validat
   # Generator
   gen_loss = model.generator_loss(unmasked_images, generated_images,
                                   local_generated_output,
-                                  global_generated_output, LAMBDA_REC,
-                                  LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL)
+                                  global_generated_output, facenet, LAMBDA_REC,
+                                  LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL, LAMBDA_ID)
 
   # TODO check that this is the correct way to use optimizer with keras.
   gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
@@ -425,9 +426,9 @@ def main(args):
     validation_references = None
 
 
-    generator, local_discriminator, global_discriminator = model.make_models()
+    generator, local_discriminator, global_discriminator, facenet = model.make_models()
 
-    train(train_dataset, generator, local_discriminator, global_discriminator,
+    train(train_dataset, generator, local_discriminator, global_discriminator, facenet,
           validation_images, validation_references, args.experiment_dir)
 
 

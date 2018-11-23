@@ -1,4 +1,14 @@
 import tensorflow as tf
+import os
+
+FACENET_DIR = '/home/gaston/workspace/two-face/facenet'
+
+# facenet model structure: https://github.com/serengil/tensorflow-101/blob/master/model/facenet_model.json
+FACENET_MODEL_PATH = os.path.join(FACENET_DIR,
+                                  'tensorflow-101/model/facenet_model_128.json')
+
+#pre-trained weights https://drive.google.com/file/d/1971Xk5RwedbudGgTIrGAL4F7Aifu7id1/view?usp=sharing
+FACENET_WEIGHTS_PATH = os.path.join(FACENET_DIR, 'facenet_weights.h5')
 
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
@@ -251,6 +261,14 @@ def make_global_discriminator_model():
   return tf.keras.Model(inputs=image, outputs=logits)
 
 
+def make_identity_model():
+  facenet = tf.keras.models.model_from_json(
+    open(FACENET_MODEL_PATH, "r").read())
+  facenet.load_weights(FACENET_WEIGHTS_PATH)
+  facenet.trainable = False
+  return facenet
+
+
 def reconstruction_loss(original_image, patched_image):
   return tf.nn.l2_loss(original_image - patched_image) * 2.0 / (
             128.0 * 128.0 * 3.0)
@@ -261,20 +279,28 @@ def generator_adversarial_loss(generated_output):
                                          generated_output)
 
 
+def identity_loss(original_image, patched_image, facenet):
+  original_identity = facenet(original_image)
+  patched_identity = facenet(patched_image)
+
+  return tf.norm(original_identity - patched_identity)
+
 def generator_loss(original_image, patched_image, local_generated_output,
-                   global_generated_output, lambda_rec,
-                   lambda_adv_local, lambda_adv_global):
+                   global_generated_output, facenet, lambda_rec,
+                   lambda_adv_local, lambda_adv_global, lambda_id):
   rec_loss = lambda_rec * reconstruction_loss(original_image, patched_image)
   local_adv_loss = lambda_adv_local * generator_adversarial_loss(
     local_generated_output)
   global_adv_loss = lambda_adv_global * generator_adversarial_loss(
     global_generated_output)
+  id_loss = lambda_id * identity_loss(original_image, patched_image, facenet)
 
   tf.summary.scalar('rec_loss', rec_loss)
   tf.summary.scalar('local_adv_loss', local_adv_loss)
   tf.summary.scalar('global_adv_loss', global_adv_loss)
+  tf.summary.scalar('identity_loss', id_loss)
 
-  return rec_loss + local_adv_loss + global_adv_loss
+  return rec_loss + local_adv_loss + global_adv_loss + id_loss
 
 
 def discriminator_loss(real_output, generated_output, lambda_adv):
@@ -291,10 +317,18 @@ def make_models():
   generator = make_generator_model()
   local_discriminator = make_local_discriminator_model()
   global_discriminator = make_global_discriminator_model()
+  facenet = make_identity_model()
 
+  tf.logging.info('Generator')
   generator.summary()
+
+  tf.logging.info('Local Discriminator')
   local_discriminator.summary()
+
+  tf.logging.info('Global Discriminator')
   global_discriminator.summary()
 
+  tf.logging.info('FaceNet')
+  facenet.summary()
 
-  return generator, local_discriminator, global_discriminator
+  return generator, local_discriminator, global_discriminator, facenet
