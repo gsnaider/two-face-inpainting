@@ -39,12 +39,13 @@ GEN_LEARNING_RATE = 1e-4
 DISC_LEARNING_RATE = 1e-4
 
 LAMBDA_REC = 1.0
-LAMBDA_ADV_LOCAL = 0.0 # 0.01
-LAMBDA_ADV_GLOBAL = 0.0 # 0.01
-LAMBDA_ID = 0.0 # 0.1
+LAMBDA_ADV_LOCAL = 0.01  # 0.01
+LAMBDA_ADV_GLOBAL = 0.01  # 0.01
+LAMBDA_ID = 0.1  # 0.1
 
-LAMBDA_LOCAL_DISC = 0.0 # 0.1
-LAMBDA_GLOBAL_DISC = 0.0 # 0.1
+LAMBDA_LOCAL_DISC = 0.1  # 0.1
+LAMBDA_GLOBAL_DISC = 0.1  # 0.1
+
 
 def get_reference_image_path_fn(train_reference_paths_dict):
   def get_reference_image_path(image_path):
@@ -118,7 +119,7 @@ def get_mask_fn(img_size, patch_size, use_batch=False):
 def extract_patch(image):
   patch_start = (IMAGE_SIZE - PATCH_SIZE) // 2
   patch_end = patch_start + PATCH_SIZE
-  return image[:,patch_start:patch_end, patch_start:patch_end, :]
+  return image[:, patch_start:patch_end, patch_start:patch_end, :]
 
 
 def patch_image(patch, image):
@@ -179,7 +180,8 @@ def expand_patches(patches):
   return tf.pad(patches, paddings, "CONSTANT")
 
 
-def train(dataset, generator, local_discriminator, global_discriminator, facenet, validation_images,
+def train(dataset, generator, local_discriminator, global_discriminator,
+          facenet, validation_images,
           validation_references, experiment_dir):
   global_step = tf.train.get_or_create_global_step()
 
@@ -188,9 +190,9 @@ def train(dataset, generator, local_discriminator, global_discriminator, facenet
 
   train_batch = iterator.get_next()
   full_images = train_batch[0]
-  (masked_images, unmasked_images, masked_reference_images) = train_batch[1]
+  (masked_images, unmasked_images, reference_images) = train_batch[1]
 
-  generated_patches = generator([masked_images, masked_reference_images],
+  generated_patches = generator([masked_images, reference_images],
                                 training=True)
 
   generated_images = patch_image(generated_patches, masked_images)
@@ -203,7 +205,8 @@ def train(dataset, generator, local_discriminator, global_discriminator, facenet
 
   local_real_output = local_discriminator(expanded_real_patches,
                                           training=True)
-  local_generated_output = local_discriminator(expanded_gen_patches, training=True)
+  local_generated_output = local_discriminator(expanded_gen_patches,
+                                               training=True)
   local_disc_loss = model.discriminator_loss(local_real_output,
                                              local_generated_output,
                                              LAMBDA_LOCAL_DISC)
@@ -218,9 +221,10 @@ def train(dataset, generator, local_discriminator, global_discriminator, facenet
 
   # Generator
   gen_loss = model.generator_loss(unmasked_images, generated_images,
-                                  local_generated_output,
-                                  global_generated_output, facenet, LAMBDA_REC,
-                                  LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL, LAMBDA_ID)
+                                  reference_images, local_generated_output,
+                                  global_generated_output, LAMBDA_REC,
+                                  LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL,
+                                  LAMBDA_ID, facenet)
 
   # TODO check that this is the correct way to use optimizer with keras.
   gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
@@ -246,8 +250,8 @@ def train(dataset, generator, local_discriminator, global_discriminator, facenet
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
   tf.summary.scalar('global_disc_loss', global_disc_loss)
-  tf.summary.image('generated_train_images', generated_images, max_outputs=9)
-
+  tf.summary.image('generated_train_images', generated_images, max_outputs=8)
+  tf.summary.image('reference_images', reference_images, max_outputs=8)
 
   # TODO see why validation images are not being generated correctly.
   # generated_validation_images = generate_images(generator,
@@ -318,6 +322,7 @@ def copy_dataset_to_mem_fs(mem_fs, dataset_zip_file_path):
     with host_fs.open(dataset_zip_filename, 'rb') as zip_file:
       with ZipFS(zip_file) as zip_fs:
         fs.copy.copy_dir(zip_fs, '.', mem_fs, '.')
+
 
 def main(args):
   BATCH_SIZE = args.batch_size
@@ -425,11 +430,12 @@ def main(args):
     validation_images = None
     validation_references = None
 
+    generator, local_discriminator, global_discriminator, facenet = model.make_models(
+      args.facenet_dir)
 
-    generator, local_discriminator, global_discriminator, facenet = model.make_models()
-
-    train(train_dataset, generator, local_discriminator, global_discriminator, facenet,
-          validation_images, validation_references, args.experiment_dir)
+    train(train_dataset, generator, local_discriminator, global_discriminator,
+          facenet, validation_images, validation_references,
+          args.experiment_dir)
 
 
 if __name__ == "__main__":
@@ -442,6 +448,9 @@ if __name__ == "__main__":
   parser.add_argument(
     '--experiment_dir',
     help='GCS or local path where checkpoints will be stored.')
+  parser.add_argument(
+    '--facenet_dir',
+    help='Directory where the weights and model of Facenet are stored.')
   parser.add_argument(
     '--batch_size',
     type=int,
