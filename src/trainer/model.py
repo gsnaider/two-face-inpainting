@@ -1,6 +1,7 @@
 import tensorflow as tf
+
 import os
-import fs
+import tempfile
 
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
@@ -258,9 +259,20 @@ def make_identity_model(facenet_dir):
   facenet_weights_path = os.path.join(facenet_dir, 'facenet_weights.h5')
 
   facenet = tf.keras.models.model_from_json(
-    fs.open(facenet_model_path, "r").read())
-  facenet.load_weights(facenet_weights_path)
+    tf.gfile.GFile(facenet_model_path, "r").read())
+
+  # This has to be done in order to be able to read the model from GCS
+  model_file = tf.gfile.GFile(facenet_weights_path, mode='rb')
+  temp_model_file = tempfile.NamedTemporaryFile(suffix='.h5',delete=True)
+  temp_model_file.write(model_file.read())
+  model_file.close()
+
+  tf.logging.debug(
+    'Reading Facenet weights from temp file: {}'.format(temp_model_file.name))
+  facenet.load_weights(temp_model_file.name)
   facenet.trainable = False
+  temp_model_file.close()
+
   return facenet
 
 
@@ -281,6 +293,8 @@ def identity_loss(reference_image, patched_image, facenet):
 
   reference_identity = facenet(reference_image)
   patched_identity = facenet(patched_image)
+
+  # TODO Could also try normalizing and apply dot product
   return tf.norm(reference_identity - patched_identity)
 
 def generator_loss(original_image, patched_image, reference_image, local_generated_output,
