@@ -1,5 +1,6 @@
 import tensorflow as tf
 import os
+import fs
 
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
@@ -257,7 +258,7 @@ def make_identity_model(facenet_dir):
   facenet_weights_path = os.path.join(facenet_dir, 'facenet_weights.h5')
 
   facenet = tf.keras.models.model_from_json(
-    open(facenet_model_path, "r").read())
+    fs.open(facenet_model_path, "r").read())
   facenet.load_weights(facenet_weights_path)
   facenet.trainable = False
   return facenet
