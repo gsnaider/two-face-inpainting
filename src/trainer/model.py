@@ -315,7 +315,7 @@ def make_models(facenet_dir):
   local_discriminator = make_local_discriminator_model()
   global_discriminator = make_global_discriminator_model()
   facenet = make_identity_model(facenet_dir)
-  
+
   tf.logging.info('Generator')
   generator.summary()
 

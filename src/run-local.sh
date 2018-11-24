@@ -1,7 +1,8 @@
 #!/bin/bash
 
-MODEL_DIR="/home/gaston/workspace/two-face-inpainting-experiments/local-runs/checkpoints"
+MODEL_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/checkpoints"
 rm -rf $MODEL_DIR/*
+
 
 DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data"
 # DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data/data.zip"

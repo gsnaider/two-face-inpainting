@@ -1,7 +1,7 @@
 #!/bin/bash
 
 now=$(date +"%Y%m%d_%H%M%S")
-JOB_NAME="casia_vgg_rec_and_local_disc"
+JOB_NAME="casia_vgg_rec_only_$now"
 BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 REGION="us-central1"
 EXPERIMENT_DIR="$BASE_DIR/$JOB_NAME"
