@@ -226,6 +226,8 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                                   LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL,
                                   LAMBDA_ID, facenet)
 
+  # TODO when doing validation put an if to not create optimizers
+
   # TODO check that this is the correct way to use optimizer with keras.
   gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
     gen_loss, var_list=generator.variables,
@@ -260,11 +262,13 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   # tf.summary.image('generated_validation_images', generated_validation_images,
   #                  max_outputs=9)
 
+  # TODO when doing validation use MonitorEvalSession. Use
   hooks = [tf.train.StopAtStepHook(num_steps=MAX_STEPS)]
   with tf.train.MonitoredTrainingSession(
           checkpoint_dir=os.path.join(experiment_dir, "train"),
           hooks=hooks) as sess:
     while not sess.should_stop():
+      # TODO when doing validation use an eval_step that doesnt call optimizers.
       train_step(sess, gen_optimizer, local_disc_optimizer,
                  global_disc_optimizer, gen_loss, local_disc_loss,
                  global_disc_loss,
