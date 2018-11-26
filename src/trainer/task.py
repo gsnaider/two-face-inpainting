@@ -23,27 +23,20 @@ REAL_DATASET_PATHS_FILE = "real-files.txt"
 MASKED_DATASET_PATHS_FILE = "masked-files.txt"
 REFERENCE_DATASET_PATHS_FILE = "reference-files.txt"
 
-
-
-EVAL_SAVE_STEPS = 100
-EVAL_SAVE_SECS=120
-
-PATH_FILE_BUFFER_SIZE = 1000000
-
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
 
-DATASET_BUFFER = 10000
+PATH_FILE_BUFFER_SIZE = 1000000
 SHUFFLE_BUFFER_SIZE = 1000
 PARALLEL_MAP_THREADS = 16
 
 MAX_STEPS = 1e6
-EPOCHS = 50
-BATCHES_PER_PRINT = 20
-BATCHES_PER_CHECKPOINT = 100
 
-GEN_LEARNING_RATE = 1e-4
-DISC_LEARNING_RATE = 1e-4
+STEPS_PER_PRINT = 20
+EVAL_SAVE_SECS=120
+
+GEN_LEARNING_RATE = 1e-5
+DISC_LEARNING_RATE = 1e-5
 
 LAMBDA_REC = 1.0
 LAMBDA_ADV_LOCAL = 0.0  # 0.01
@@ -158,7 +151,7 @@ def train_step(sess, optimizers, gen_loss, local_disc_loss,
     [optimizers, gen_loss, local_disc_loss, global_disc_loss, global_step])
 
   # Divide by 3 because we increment the global_step 3 times per each train_step.
-  if (step_value // 3) % (BATCHES_PER_PRINT // 3) == 0:
+  if (step_value // 3) % (STEPS_PER_PRINT // 3) == 0:
     tf.logging.info(
       "Step: {} - Gen_loss: {} - Local_disc_loss: {} - Global_disc_loss: {}".format(
         step_value,
