@@ -23,4 +23,5 @@ gcloud ml-engine jobs submit training $JOB_NAME \
     --dataset_path $DATASET_PATH \
     --experiment_dir $EXPERIMENT_DIR \
     --batch_size 32 \
+    --train \
     --verbosity "INFO"

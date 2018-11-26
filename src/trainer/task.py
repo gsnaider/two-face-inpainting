@@ -21,6 +21,11 @@ REAL_DATASET_PATHS_FILE = "real-files.txt"
 MASKED_DATASET_PATHS_FILE = "masked-files.txt"
 REFERENCE_DATASET_PATHS_FILE = "reference-files.txt"
 
+
+
+EVAL_SAVE_STEPS = 100
+EVAL_SAVE_SECS=120
+
 PATH_FILE_BUFFER_SIZE = 1000000
 
 IMAGE_SIZE = 128
@@ -143,18 +148,6 @@ def patch_image(patch, image):
   return tf.concat([upper_edge, middle, lower_edge], axis=1)
 
 
-def generate_images(generator, images, reference_images):
-  # make sure the training parameter is set to False because we
-  # don't want to train the batchnorm layer when doing inference.
-  mask_fn = get_mask_fn(IMAGE_SIZE, PATCH_SIZE, use_batch=True)
-  mask_images = mask_fn(images)
-  reference_images = tf.constant(reference_images, tf.float32)
-  patches = generator([mask_images, reference_images], training=False)
-  generated_images = patch_image(patches, mask_images)
-
-  return generated_images
-
-
 def train_step(sess, gen_optimizer, local_disc_optimizer,
                global_disc_optimizer, gen_loss, local_disc_loss,
                global_disc_loss,
@@ -181,8 +174,7 @@ def expand_patches(patches):
 
 
 def train(dataset, generator, local_discriminator, global_discriminator,
-          facenet, validation_images,
-          validation_references, experiment_dir):
+          facenet, experiment_dir):
   global_step = tf.train.get_or_create_global_step()
 
   dataset = dataset.repeat()
@@ -255,13 +247,6 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   tf.summary.image('generated_train_images', generated_images, max_outputs=8)
   tf.summary.image('reference_images', reference_images, max_outputs=8)
 
-  # TODO see why validation images are not being generated correctly.
-  # generated_validation_images = generate_images(generator,
-  #                                               validation_images,
-  #                                               validation_references)
-  # tf.summary.image('generated_validation_images', generated_validation_images,
-  #                  max_outputs=9)
-
   # TODO when doing validation use MonitorEvalSession. Use
   hooks = [tf.train.StopAtStepHook(num_steps=MAX_STEPS)]
   with tf.train.MonitoredTrainingSession(
@@ -274,6 +259,76 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                  global_disc_loss,
                  global_step)
 
+
+def evaluate(dataset, generator, local_discriminator, global_discriminator,
+             facenet, experiment_dir):
+
+  generator.trainable = False
+  local_discriminator.trainable = False
+  global_discriminator.trainable = False
+  facenet.trainable = False
+
+  global_step = tf.train.get_or_create_global_step()
+
+  dataset = dataset.repeat()
+  iterator = dataset.make_one_shot_iterator()
+
+  eval_batch = iterator.get_next()
+  full_images = eval_batch[0]
+  (masked_images, unmasked_images, reference_images) = eval_batch[1]
+
+  generated_patches = generator([masked_images, reference_images],
+                                training=False)
+
+  generated_images = patch_image(generated_patches, masked_images)
+
+  # Local discriminator
+
+  # Expand patches to because in tf <= 1.10 VGG min input size is 48x48
+  expanded_real_patches = expand_patches(extract_patch(full_images))
+  expanded_gen_patches = expand_patches(generated_patches)
+
+  local_real_output = local_discriminator(expanded_real_patches,
+                                          training=False)
+  local_generated_output = local_discriminator(expanded_gen_patches,
+                                               training=False)
+  local_disc_loss = model.discriminator_loss(local_real_output,
+                                             local_generated_output,
+                                             LAMBDA_LOCAL_DISC)
+
+  # Global discriminator
+  global_real_output = global_discriminator(full_images, training=False)
+  global_generated_output = global_discriminator(generated_images,
+                                                 training=False)
+  global_disc_loss = model.discriminator_loss(global_real_output,
+                                              global_generated_output,
+                                              LAMBDA_GLOBAL_DISC)
+
+  # Generator
+  gen_loss = model.generator_loss(unmasked_images, generated_images,
+                                  reference_images, local_generated_output,
+                                  global_generated_output, LAMBDA_REC,
+                                  LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL,
+                                  LAMBDA_ID, facenet)
+
+  tf.summary.scalar('gen_loss', gen_loss)
+  tf.summary.scalar('local_disc_loss', local_disc_loss)
+  tf.summary.scalar('global_disc_loss', global_disc_loss)
+  tf.summary.image('original_eval_images', generated_images, max_outputs=8)
+  tf.summary.image('generated_eval_images', generated_images, max_outputs=8)
+  tf.summary.image('reference_eval_images', reference_images, max_outputs=8)
+
+  with tf.train.SingularMonitoredSession(
+          checkpoint_dir=os.path.join(experiment_dir, "train"),
+          hooks=[tf.train.SummarySaverHook(
+            save_secs=EVAL_SAVE_SECS,
+            output_dir=os.path.join(experiment_dir, "eval"),
+            summary_op=tf.summary.merge_all())]) as sess:
+    tf.logging.info("Starting evaluation.")
+    while not sess.should_stop():
+      # No need to run the session on any variable since they will be calculated
+      # by the summaries.
+      pass
 
 def get_read_images_from_fs_fn(dataset_fs, base_path):
   def read_images_from_fs(image_path):
@@ -328,14 +383,19 @@ def copy_dataset_to_mem_fs(mem_fs, dataset_zip_file_path):
         fs.copy.copy_dir(zip_fs, '.', mem_fs, '.')
 
 
+
 def main(args):
+  if args.train:
+    tf.logging.info("Starting training")
+  else:
+    tf.logging.info("Starting evaluation")
+    
   BATCH_SIZE = args.batch_size
 
-  DATASET_PATH = args.dataset_path
-  DATASET_TRAIN_PATH = "train"
-  TRAIN_REAL_PATH = os.path.join(DATASET_TRAIN_PATH, "real")
-  TRAIN_MASKED_PATH = os.path.join(DATASET_TRAIN_PATH, "masked")
-  TRAIN_REFERENCE_PATH = os.path.join(DATASET_TRAIN_PATH, "reference")
+  DATASET_PATH = "train" if args.train else "validation"
+  REAL_IMGS_PATH = os.path.join(DATASET_PATH, "real")
+  MASKED_IMGS_PATH = os.path.join(DATASET_PATH, "masked")
+  REFERENCE_IMGS_PATH = os.path.join(DATASET_PATH, "reference")
 
   if (args.dataset_path.endswith('.zip')):
     tf.logging.info('Creating memory filesystem')
@@ -368,8 +428,8 @@ def main(args):
     real_dataset = real_dataset.shuffle(SHUFFLE_BUFFER_SIZE)
 
     real_dataset = real_dataset.map(
-      get_load_and_preprocess_image_fn(dataset_fs, TRAIN_REAL_PATH,
-                                       TRAIN_REFERENCE_PATH,
+      get_load_and_preprocess_image_fn(dataset_fs, REAL_IMGS_PATH,
+                                       REFERENCE_IMGS_PATH,
                                        train_reference_paths_dict),
       num_parallel_calls=PARALLEL_MAP_THREADS)
     real_dataset = real_dataset.prefetch(BATCH_SIZE * 2)
@@ -381,66 +441,25 @@ def main(args):
     masked_dataset = masked_dataset.shuffle(SHUFFLE_BUFFER_SIZE)
 
     masked_dataset = masked_dataset.map(
-      get_load_and_preprocess_image_fn(dataset_fs, TRAIN_MASKED_PATH,
-                                       TRAIN_REFERENCE_PATH,
+      get_load_and_preprocess_image_fn(dataset_fs, MASKED_IMGS_PATH,
+                                       REFERENCE_IMGS_PATH,
                                        train_reference_paths_dict, masked=True),
       num_parallel_calls=PARALLEL_MAP_THREADS)
     masked_dataset = masked_dataset.prefetch(BATCH_SIZE * 2)
     masked_dataset = masked_dataset.batch(BATCH_SIZE, drop_remainder=True)
 
-    train_dataset = tf.data.Dataset.zip((real_dataset, masked_dataset))
-    train_dataset = train_dataset.prefetch(1)
-
-    # TODO Change to tf and fs
-    # Validation images
-    # VALIDATION_IDENTITIES = [
-    #   "0005366",
-    #   "0005367",
-    #   "0005370",
-    #   "0005371",
-    #   "0005373",
-    #   "0005376",
-    #   "0005378",
-    #   "0005379",
-    #   "0005381"
-    # ]
-    #
-    # validation_images = []
-    # validation_references = []
-    # for identity in VALIDATION_IDENTITIES:
-    #   full_identity_dir = os.path.join(DATASET_PATH, "validation", identity)
-    #
-    #   mask_image_file = tf.gfile.GFile(
-    #     os.path.join(full_identity_dir, "001.jpg"),
-    #     mode='rb')
-    #   mask_image = plt.imread(mask_image_file)
-    #
-    #   reference_image_file = tf.gfile.GFile(
-    #     os.path.join(full_identity_dir, "002.jpg"),
-    #     mode='rb')
-    #   reference_image = plt.imread(reference_image_file)
-    #
-    #   mask_image = fix_image_encoding(mask_image)
-    #   reference_image = fix_image_encoding(reference_image)
-    #
-    #   mask_image = resize(mask_image, (IMAGE_SIZE, IMAGE_SIZE))
-    #   reference_image = resize(reference_image, (IMAGE_SIZE, IMAGE_SIZE))
-    #
-    #   validation_images.append(mask_image)
-    #   validation_references.append(reference_image)
-    #
-    # validation_images = np.array(validation_images).astype('float32')
-    # validation_references = np.array(validation_references).astype('float32')
-    validation_images = None
-    validation_references = None
+    full_dataset = tf.data.Dataset.zip((real_dataset, masked_dataset))
+    full_dataset = full_dataset.prefetch(1)
 
     generator, local_discriminator, global_discriminator, facenet = model.make_models(
       args.facenet_dir)
 
-    train(train_dataset, generator, local_discriminator, global_discriminator,
-          facenet, validation_images, validation_references,
-          args.experiment_dir)
-
+    if args.train:
+      train(full_dataset, generator, local_discriminator, global_discriminator,
+            facenet, args.experiment_dir)
+    else:
+      evaluate(full_dataset, generator, local_discriminator, global_discriminator,
+           facenet, args.experiment_dir)
 
 if __name__ == "__main__":
   tf.logging.info("Parsing flags")
@@ -461,6 +480,11 @@ if __name__ == "__main__":
     help='Batch size for training.',
     default=16)
   parser.add_argument(
+    '--train',
+    dest='train',
+    help="True if it's a training run, False if validation run.",
+    action='store_true')
+  parser.add_argument(
     '--verbosity',
     choices=['DEBUG', 'ERROR', 'FATAL', 'INFO', 'WARN'],
     default='INFO')
@@ -476,5 +500,4 @@ if __name__ == "__main__":
   tf.logging.info('Dataset: {} - checkpoints: {}'.format(args.dataset_path,
                                                          args.experiment_dir))
 
-  tf.logging.info("Starting training")
   main(args)

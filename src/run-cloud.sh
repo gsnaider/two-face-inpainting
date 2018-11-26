@@ -4,7 +4,9 @@ now=$(date +"%Y%m%d_%H%M%S")
 JOB_NAME="casia_vgg_rec_only_$now"
 BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 REGION="us-central1"
-EXPERIMENT_DIR="$BASE_DIR/$JOB_NAME"
+
+EXPERIMENT_NAME="casia_vgg_eval"
+EXPERIMENT_DIR="$BASE_DIR/$EXPERIMENT_NAME"
 
 # DATASET_PATH="gs://two-face-inpainting-mlengine/data"
 DATASET_PATH="gs://two-face-inpainting-mlengine/data/data.zip"
@@ -26,4 +28,5 @@ gcloud ml-engine jobs submit training $JOB_NAME \
     --experiment_dir $EXPERIMENT_DIR \
     --facenet_dir $FACENET_DIR \
     --batch_size 32 \
+    --train \
     --verbosity "INFO"
