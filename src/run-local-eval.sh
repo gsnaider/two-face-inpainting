@@ -4,7 +4,6 @@
 #rm -rf $EXPERIMENT_DIR/*
 
 BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
-
 EXPERIMENT_NAME="casia_vgg_rec_only_20181124_004649_eval"
 EXPERIMENT_DIR="$BASE_DIR/$EXPERIMENT_NAME"
 
