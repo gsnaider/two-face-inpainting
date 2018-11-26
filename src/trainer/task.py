@@ -1,3 +1,5 @@
+import time
+
 import tensorflow as tf
 import argparse
 import fs
@@ -148,15 +150,12 @@ def patch_image(patch, image):
   return tf.concat([upper_edge, middle, lower_edge], axis=1)
 
 
-def train_step(sess, gen_optimizer, local_disc_optimizer,
-               global_disc_optimizer, gen_loss, local_disc_loss,
+def train_step(sess, optimizers, gen_loss, local_disc_loss,
                global_disc_loss,
                global_step):
-  _, gen_loss_value = sess.run([gen_optimizer, gen_loss])
-  _, local_disc_loss_value = sess.run(
-    [local_disc_optimizer, local_disc_loss])
-  _, global_disc_loss_value, step_value = sess.run(
-    [global_disc_optimizer, global_disc_loss, global_step])
+  (_, gen_loss_value, local_disc_loss_value, global_disc_loss_value,
+   step_value) = sess.run(
+    [optimizers, gen_loss, local_disc_loss, global_disc_loss, global_step])
 
   # Divide by 3 because we increment the global_step 3 times per each train_step.
   if (step_value // 3) % (BATCHES_PER_PRINT // 3) == 0:
@@ -218,8 +217,6 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                                   LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL,
                                   LAMBDA_ID, facenet)
 
-  # TODO when doing validation put an if to not create optimizers
-
   # TODO check that this is the correct way to use optimizer with keras.
   gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
     gen_loss, var_list=generator.variables,
@@ -239,6 +236,11 @@ def train(dataset, generator, local_discriminator, global_discriminator,
     global_disc_loss, var_list=global_discriminator.variables,
     global_step=global_step)
 
+  # This is required for the batch_normalization layers.
+  update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+  with tf.control_dependencies(update_ops):
+    optimizers = tf.group([gen_optimizer, local_disc_optimizer, global_disc_optimizer])
+
   # tf.logging.info('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
 
   tf.summary.scalar('gen_loss', gen_loss)
@@ -247,15 +249,12 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   tf.summary.image('generated_train_images', generated_images, max_outputs=8)
   tf.summary.image('reference_images', reference_images, max_outputs=8)
 
-  # TODO when doing validation use MonitorEvalSession. Use
   hooks = [tf.train.StopAtStepHook(num_steps=MAX_STEPS)]
   with tf.train.MonitoredTrainingSession(
           checkpoint_dir=os.path.join(experiment_dir, "train"),
           hooks=hooks) as sess:
     while not sess.should_stop():
-      # TODO when doing validation use an eval_step that doesnt call optimizers.
-      train_step(sess, gen_optimizer, local_disc_optimizer,
-                 global_disc_optimizer, gen_loss, local_disc_loss,
+      train_step(sess, optimizers, gen_loss, local_disc_loss,
                  global_disc_loss,
                  global_step)
 
@@ -314,21 +313,29 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
   tf.summary.scalar('global_disc_loss', global_disc_loss)
-  tf.summary.image('original_eval_images', generated_images, max_outputs=8)
+  tf.summary.image('original_eval_images', unmasked_images, max_outputs=8)
   tf.summary.image('generated_eval_images', generated_images, max_outputs=8)
   tf.summary.image('reference_eval_images', reference_images, max_outputs=8)
 
+  # hooks = [tf.train.SummarySaverHook(
+  #   save_secs=EVAL_SAVE_SECS,
+  #   output_dir=os.path.join(experiment_dir, "eval"),
+  #   summary_op=tf.summary.merge_all())]
+
+  writer = tf.summary.FileWriter(os.path.join(experiment_dir, "eval"))
+  summary_op = tf.summary.merge_all()
+
   with tf.train.SingularMonitoredSession(
-          checkpoint_dir=os.path.join(experiment_dir, "train"),
-          hooks=[tf.train.SummarySaverHook(
-            save_secs=EVAL_SAVE_SECS,
-            output_dir=os.path.join(experiment_dir, "eval"),
-            summary_op=tf.summary.merge_all())]) as sess:
+          checkpoint_dir=os.path.join(experiment_dir, "train")) as sess:
     tf.logging.info("Starting evaluation.")
     while not sess.should_stop():
-      # No need to run the session on any variable since they will be calculated
-      # by the summaries.
-      pass
+      gen_loss_value, local_disc_loss_value, global_disc_loss_value, global_step_value = sess.run(
+        [gen_loss, local_disc_loss, global_disc_loss, global_step])
+      tf.logging.info(
+        'Gen_loss: {} - Local_disc_loss: {} - Global_disc_loss: {}'.format(
+          gen_loss_value, local_disc_loss_value, global_disc_loss_value))
+      writer.add_summary(sess.run(summary_op), global_step_value)
+      time.sleep(EVAL_SAVE_SECS)
 
 def get_read_images_from_fs_fn(dataset_fs, base_path):
   def read_images_from_fs(image_path):
@@ -389,7 +396,7 @@ def main(args):
     tf.logging.info("Starting training")
   else:
     tf.logging.info("Starting evaluation")
-    
+
   BATCH_SIZE = args.batch_size
 
   DATASET_PATH = "train" if args.train else "validation"
