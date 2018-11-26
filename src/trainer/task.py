@@ -35,8 +35,8 @@ MAX_STEPS = 1e6
 STEPS_PER_PRINT = 20
 EVAL_SAVE_SECS=120
 
-GEN_LEARNING_RATE = 1e-5
-DISC_LEARNING_RATE = 1e-5
+GEN_LEARNING_RATE = 1e-4
+DISC_LEARNING_RATE = 1e-4
 
 LAMBDA_REC = 1.0
 LAMBDA_ADV_LOCAL = 0.0  # 0.01
@@ -318,17 +318,19 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
   writer = tf.summary.FileWriter(os.path.join(experiment_dir, "eval"))
   summary_op = tf.summary.merge_all()
 
-  with tf.train.SingularMonitoredSession(
-          checkpoint_dir=os.path.join(experiment_dir, "train")) as sess:
-    tf.logging.info("Starting evaluation.")
-    while not sess.should_stop():
+  # Have to do this because for some reason the checkpoints are not being updated.
+  # TODO see if this could be done better.
+  while True:
+    with tf.train.SingularMonitoredSession(
+            checkpoint_dir=os.path.join(experiment_dir, "train")) as sess:
+      tf.logging.info("Starting evaluation.")
       gen_loss_value, local_disc_loss_value, global_disc_loss_value, global_step_value = sess.run(
         [gen_loss, local_disc_loss, global_disc_loss, global_step])
       tf.logging.info(
         'Gen_loss: {} - Local_disc_loss: {} - Global_disc_loss: {}'.format(
           gen_loss_value, local_disc_loss_value, global_disc_loss_value))
       writer.add_summary(sess.run(summary_op), global_step_value)
-      time.sleep(EVAL_SAVE_SECS)
+    time.sleep(EVAL_SAVE_SECS)
 
 def get_read_images_from_fs_fn(dataset_fs, base_path):
   def read_images_from_fs(image_path):
@@ -392,6 +394,7 @@ def main(args):
 
   BATCH_SIZE = args.batch_size
 
+  # TODO this shouldn't be required now, change the train and eval directories to be equal inside
   DATASET_PATH = "train" if args.train else "validation"
   REAL_IMGS_PATH = os.path.join(DATASET_PATH, "real")
   MASKED_IMGS_PATH = os.path.join(DATASET_PATH, "masked")
