@@ -23,6 +23,9 @@ REAL_DATASET_PATHS_FILE = "real-files.txt"
 MASKED_DATASET_PATHS_FILE = "masked-files.txt"
 REFERENCE_DATASET_PATHS_FILE = "reference-files.txt"
 
+STEPS_PER_PRINT = 20
+EVAL_SAVE_SECS=120
+
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
 
@@ -30,10 +33,7 @@ PATH_FILE_BUFFER_SIZE = 1000000
 SHUFFLE_BUFFER_SIZE = 1000
 PARALLEL_MAP_THREADS = 16
 
-MAX_STEPS = 1e6
-
-STEPS_PER_PRINT = 20
-EVAL_SAVE_SECS=120
+MAX_STEPS = 140000
 
 GEN_LEARNING_RATE = 1e-4
 DISC_LEARNING_RATE = 1e-4
@@ -167,6 +167,11 @@ def expand_patches(patches):
 
 def train(dataset, generator, local_discriminator, global_discriminator,
           facenet, experiment_dir):
+
+  # TODO remove if BN works.
+  # all new operations will be in train mode from now on
+  # tf.keras.backend.set_learning_phase(1)
+
   global_step = tf.train.get_or_create_global_step()
 
   dataset = dataset.repeat()
@@ -210,28 +215,27 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                                   LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL,
                                   LAMBDA_ID, facenet)
 
-  # TODO check that this is the correct way to use optimizer with keras.
-  gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
-    gen_loss, var_list=generator.variables,
-    global_step=global_step)
-
-  # TODO check that this works
-  # tf.logging.info('Generator variables {}'.format([v.name for v in generator.variables]))
-
-  # TODO Seems that the disc optimizer is propagating changes to the generator.
-  local_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
-    local_disc_loss, var_list=local_discriminator.variables,
-    global_step=global_step)
-
-  # tf.logging.info('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
-
-  global_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
-    global_disc_loss, var_list=global_discriminator.variables,
-    global_step=global_step)
-
   # This is required for the batch_normalization layers.
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
   with tf.control_dependencies(update_ops):
+    # TODO check that this is the correct way to use optimizer with keras.
+    gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
+      gen_loss, var_list=generator.variables,
+      global_step=global_step)
+
+    # TODO check that this works
+    # tf.logging.info('Generator variables {}'.format([v.name for v in generator.variables]))
+
+    # TODO Seems that the disc optimizer is propagating changes to the generator.
+    local_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+      local_disc_loss, var_list=local_discriminator.variables,
+      global_step=global_step)
+
+    # tf.logging.info('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
+
+    global_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+      global_disc_loss, var_list=global_discriminator.variables,
+      global_step=global_step)
     optimizers = tf.group([gen_optimizer, local_disc_optimizer, global_disc_optimizer])
 
   # tf.logging.info('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
@@ -255,10 +259,14 @@ def train(dataset, generator, local_discriminator, global_discriminator,
 def evaluate(dataset, generator, local_discriminator, global_discriminator,
              facenet, experiment_dir):
 
-  generator.trainable = False
-  local_discriminator.trainable = False
-  global_discriminator.trainable = False
-  facenet.trainable = False
+  # generator.trainable = False
+  # local_discriminator.trainable = False
+  # global_discriminator.trainable = False
+  # facenet.trainable = False
+
+  # TODO remove if BN works.
+  # all new operations will be in test mode from now on
+  # tf.keras.backend.set_learning_phase(0)
 
   global_step = tf.train.get_or_create_global_step()
 
@@ -455,7 +463,7 @@ def main(args):
     full_dataset = full_dataset.prefetch(1)
 
     generator, local_discriminator, global_discriminator, facenet = model.make_models(
-      args.facenet_dir)
+      args.facenet_dir, train=args.train)
 
     if args.train:
       train(full_dataset, generator, local_discriminator, global_discriminator,
