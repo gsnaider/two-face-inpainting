@@ -7,7 +7,7 @@
 #EXPERIMENT_NAME="casia_vgg_rec_only_v4_5_2"
 #EXPERIMENT_DIR="$BASE_DIR/$EXPERIMENT_NAME"
 
-EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/save_model_test_2"
+EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/save_model_test_3"
 
 DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data/val_data"
 # DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data/val_data/val_data.zip"
@@ -25,4 +25,5 @@ gcloud ml-engine local train \
     --facenet_dir $FACENET_DIR \
     --batch_size 8 \
     --run_mode "SAVE_MODEL" \
+    --model_number 1 \
     --verbosity "INFO"

@@ -339,7 +339,7 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
     time.sleep(EVAL_SAVE_SECS)
 
 
-def save_model(generator, experiment_dir):
+def save_model(generator, experiment_dir, model_number):
   # TODO if we add namespace to the models, we shouldn't need to create the
   # whole model here, only the generator
   global_step = tf.train.get_or_create_global_step()
@@ -354,14 +354,12 @@ def save_model(generator, experiment_dir):
 
   saver = tf.train.Saver()
   with tf.Session() as sess:
-    # TODO Ver si hace falta initialize variables
-    # TODO check that the saved model is correct (after restoring)
     saver.restore(sess, tf.train.latest_checkpoint(
       os.path.join(experiment_dir, 'train')))
     tf.logging.info('Checkpoints restored.')
 
     tf.saved_model.simple_save(sess,
-                               os.path.join(experiment_dir, "saved_model"),
+                               os.path.join(experiment_dir, "saved_model", str(model_number)),
                                inputs={'masked_image': masked_images,
                                        'reference_image': reference_images},
                                outputs={'output_image': generated_images})
@@ -430,14 +428,14 @@ def main(args):
     assert args.run_mode == SAVE_MODEL_RUN_MODE
     tf.logging.info("Creating model for inference")
 
-  # TODO testing, switch back to train=(args.run_mode == TRAIN_RUN_MODE)
-  # generator, local_discriminator, global_discriminator, facenet = model.make_models(
-  #   args.facenet_dir, train=(args.run_mode == TRAIN_RUN_MODE))
+  # TODO testing, switch back to train
   generator, local_discriminator, global_discriminator, facenet = model.make_models(
-    args.facenet_dir, train=True)
+    args.facenet_dir, train=(args.run_mode == TRAIN_RUN_MODE))
+  # generator, local_discriminator, global_discriminator, facenet = model.make_models(
+  #   args.facenet_dir, train=True)
 
   if args.run_mode == SAVE_MODEL_RUN_MODE:
-    save_model(generator, args.experiment_dir)
+    save_model(generator, args.experiment_dir, args.model_number)
     return
 
   BATCH_SIZE = args.batch_size
@@ -533,6 +531,10 @@ if __name__ == "__main__":
     choices=[TRAIN_RUN_MODE, EVAL_RUN_MODE, SAVE_MODEL_RUN_MODE],
     help="TRAIN for training the model, EVAL for evaluating on validation data, SAVE_MODEL for storing the model for inference.",
     default=SAVE_MODEL_RUN_MODE)
+  parser.add_argument(
+    '--model_number',
+    type=int,
+    help='Model number for saving model. Only when using run_mode=SAVE_MODEL.')
   parser.add_argument(
     '--verbosity',
     choices=['DEBUG', 'ERROR', 'FATAL', 'INFO', 'WARN'],
