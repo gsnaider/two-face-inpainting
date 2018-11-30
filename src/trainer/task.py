@@ -37,7 +37,7 @@ PATH_FILE_BUFFER_SIZE = 1000000
 SHUFFLE_BUFFER_SIZE = 1000
 PARALLEL_MAP_THREADS = 16
 
-MAX_STEPS = 25000
+MAX_STEPS = 6000
 
 GEN_LEARNING_RATE = 1e-4
 DISC_LEARNING_RATE = 1e-4
@@ -47,7 +47,7 @@ LAMBDA_ADV_LOCAL = 0.0  # 0.01
 LAMBDA_ADV_GLOBAL = 0.0  # 0.01
 LAMBDA_ID = 0.0  # 0.1
 
-LAMBDA_LOCAL_DISC = 0.0  # 0.1
+LAMBDA_LOCAL_DISC = 0.1  # 0.1
 LAMBDA_GLOBAL_DISC = 0.0  # 0.1
 
 
@@ -500,13 +500,13 @@ def main(args):
     full_dataset = tf.data.Dataset.zip((real_dataset, masked_dataset))
     full_dataset = full_dataset.prefetch(1)
 
-  if args.run_mode == TRAIN_RUN_MODE:
-    train(full_dataset, generator, local_discriminator, global_discriminator,
-          facenet, args.experiment_dir)
-  elif args.run_mode == EVAL_RUN_MODE:
-    evaluate(full_dataset, generator, local_discriminator,
-             global_discriminator,
-             facenet, args.experiment_dir)
+    if args.run_mode == TRAIN_RUN_MODE:
+      train(full_dataset, generator, local_discriminator, global_discriminator,
+            facenet, args.experiment_dir)
+    elif args.run_mode == EVAL_RUN_MODE:
+      evaluate(full_dataset, generator, local_discriminator,
+               global_discriminator,
+               facenet, args.experiment_dir)
 
 if __name__ == "__main__":
   tf.logging.info("Parsing flags")
