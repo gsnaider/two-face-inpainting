@@ -28,5 +28,5 @@ gcloud ml-engine jobs submit training $JOB_NAME \
     --experiment_dir $EXPERIMENT_DIR \
     --facenet_dir $FACENET_DIR \
     --batch_size 32 \
-    --train \
+    --run_mode "TRAIN" \
     --verbosity "INFO"

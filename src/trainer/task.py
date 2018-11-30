@@ -19,6 +19,10 @@ from skimage.transform import resize
 
 import trainer.model as model
 
+TRAIN_RUN_MODE = 'TRAIN'
+EVAL_RUN_MODE = 'EVAL'
+SAVE_MODEL_RUN_MODE = 'SAVE_MODEL'
+
 REAL_DATASET_PATHS_FILE = "real-files.txt"
 MASKED_DATASET_PATHS_FILE = "masked-files.txt"
 REFERENCE_DATASET_PATHS_FILE = "reference-files.txt"
@@ -33,7 +37,7 @@ PATH_FILE_BUFFER_SIZE = 1000000
 SHUFFLE_BUFFER_SIZE = 1000
 PARALLEL_MAP_THREADS = 16
 
-MAX_STEPS = 140000
+MAX_STEPS = 25000
 
 GEN_LEARNING_RATE = 1e-4
 DISC_LEARNING_RATE = 1e-4
@@ -168,7 +172,7 @@ def expand_patches(patches):
 def train(dataset, generator, local_discriminator, global_discriminator,
           facenet, experiment_dir):
 
-  # TODO remove if BN works.
+  # TODO This didn't fixed BN. See if we can use it.
   # all new operations will be in train mode from now on
   # tf.keras.backend.set_learning_phase(1)
 
@@ -255,16 +259,10 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                  global_disc_loss,
                  global_step)
 
-
 def evaluate(dataset, generator, local_discriminator, global_discriminator,
              facenet, experiment_dir):
 
-  # generator.trainable = False
-  # local_discriminator.trainable = False
-  # global_discriminator.trainable = False
-  # facenet.trainable = False
-
-  # TODO remove if BN works.
+  # TODO This didn't fixed BN. See if we can use it.
   # all new operations will be in test mode from now on
   # tf.keras.backend.set_learning_phase(0)
 
@@ -340,6 +338,37 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
       writer.add_summary(sess.run(summary_op), global_step_value)
     time.sleep(EVAL_SAVE_SECS)
 
+
+def save_model(dataset, generator, facenet, experiment_dir):
+  # TODO if we add namespace to the models, we shouldn't need to create the
+  # whole model here, only the generator
+  global_step = tf.train.get_or_create_global_step()
+
+  dataset = dataset.repeat()
+  iterator = dataset.make_one_shot_iterator()
+
+  eval_batch = iterator.get_next()
+  full_images = eval_batch[0]
+  (masked_images, unmasked_images, reference_images) = eval_batch[1]
+
+  generated_patches = generator([masked_images, reference_images],
+                                training=False)
+
+  generated_images = patch_image(generated_patches, masked_images)
+
+  saver = tf.train.Saver()
+  with tf.Session() as sess:
+    # TODO Ver si hace falta initialize variables
+    saver.restore(sess, tf.train.latest_checkpoint(
+      os.path.join(experiment_dir, 'train')))
+    tf.logging.info('Checkpoints restored.')
+
+    tf.saved_model.simple_save(sess,
+                               os.path.join(experiment_dir, "saved_model"),
+                               inputs={'masked_image': masked_images,
+                                       'reference_image': reference_images},
+                               outputs={'patched_image': generated_images})
+
 def get_read_images_from_fs_fn(dataset_fs, base_path):
   def read_images_from_fs(image_path):
     image_path = image_path.decode('UTF-8')
@@ -394,16 +423,20 @@ def copy_dataset_to_mem_fs(mem_fs, dataset_zip_file_path):
 
 
 
+# TODO add flag for saving model
 def main(args):
-  if args.train:
+  if args.run_mode == TRAIN_RUN_MODE:
     tf.logging.info("Starting training")
-  else:
+  elif args.run_mode == EVAL_RUN_MODE:
     tf.logging.info("Starting evaluation")
+  else:
+    assert args.run_mode == SAVE_MODEL_RUN_MODE
+    tf.logging.info("Creating model for inference")
 
   BATCH_SIZE = args.batch_size
 
   # TODO this shouldn't be required now, change the train and eval directories to be equal inside
-  DATASET_PATH = "train" if args.train else "validation"
+  DATASET_PATH = "train" if (args.run_mode == TRAIN_RUN_MODE) else "validation"
   REAL_IMGS_PATH = os.path.join(DATASET_PATH, "real")
   MASKED_IMGS_PATH = os.path.join(DATASET_PATH, "masked")
   REFERENCE_IMGS_PATH = os.path.join(DATASET_PATH, "reference")
@@ -463,14 +496,17 @@ def main(args):
     full_dataset = full_dataset.prefetch(1)
 
     generator, local_discriminator, global_discriminator, facenet = model.make_models(
-      args.facenet_dir, train=args.train)
+      args.facenet_dir, train=(args.run_mode==TRAIN_RUN_MODE))
 
-    if args.train:
+    if args.run_mode == TRAIN_RUN_MODE:
       train(full_dataset, generator, local_discriminator, global_discriminator,
             facenet, args.experiment_dir)
+    elif args.run_mode == EVAL_RUN_MODE:
+      evaluate(full_dataset, generator, local_discriminator,
+               global_discriminator,
+               facenet, args.experiment_dir)
     else:
-      evaluate(full_dataset, generator, local_discriminator, global_discriminator,
-           facenet, args.experiment_dir)
+      save_model(full_dataset, generator, facenet, args.experiment_dir)
 
 if __name__ == "__main__":
   tf.logging.info("Parsing flags")
@@ -491,10 +527,10 @@ if __name__ == "__main__":
     help='Batch size for training.',
     default=16)
   parser.add_argument(
-    '--train',
-    dest='train',
-    help="True if it's a training run, False if validation run.",
-    action='store_true')
+    '--run_mode',
+    choices=[TRAIN_RUN_MODE, EVAL_RUN_MODE, SAVE_MODEL_RUN_MODE],
+    help="TRAIN for training the model, EVAL for evaluating on validation data, SAVE_MODEL for storing the model for inference.",
+    default=SAVE_MODEL_RUN_MODE)
   parser.add_argument(
     '--verbosity',
     choices=['DEBUG', 'ERROR', 'FATAL', 'INFO', 'WARN'],

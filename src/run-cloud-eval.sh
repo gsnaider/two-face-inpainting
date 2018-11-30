@@ -27,5 +27,6 @@ gcloud ml-engine jobs submit training $JOB_NAME \
     --dataset_path $DATASET_PATH \
     --experiment_dir $EXPERIMENT_DIR \
     --facenet_dir $FACENET_DIR \
-    --batch_size 32 \
+    --batch_size 16 \
+    --run_mode "EVAL" \
     --verbosity "INFO"

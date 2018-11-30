@@ -24,5 +24,5 @@ gcloud ml-engine local train \
     --experiment_dir $EXPERIMENT_DIR \
     --facenet_dir $FACENET_DIR \
     --batch_size 8 \
-    --run_mode "EVAL" \
+    --run_mode "SAVE_MODEL" \
     --verbosity "INFO"
