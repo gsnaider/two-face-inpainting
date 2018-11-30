@@ -339,17 +339,13 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
     time.sleep(EVAL_SAVE_SECS)
 
 
-def save_model(dataset, generator, facenet, experiment_dir):
+def save_model(generator, experiment_dir):
   # TODO if we add namespace to the models, we shouldn't need to create the
   # whole model here, only the generator
   global_step = tf.train.get_or_create_global_step()
 
-  dataset = dataset.repeat()
-  iterator = dataset.make_one_shot_iterator()
-
-  eval_batch = iterator.get_next()
-  full_images = eval_batch[0]
-  (masked_images, unmasked_images, reference_images) = eval_batch[1]
+  masked_images = tf.placeholder(tf.float32, name='masked_images_ph')
+  reference_images = tf.placeholder(tf.float32, name='reference_images_ph')
 
   generated_patches = generator([masked_images, reference_images],
                                 training=False)
@@ -359,6 +355,7 @@ def save_model(dataset, generator, facenet, experiment_dir):
   saver = tf.train.Saver()
   with tf.Session() as sess:
     # TODO Ver si hace falta initialize variables
+    # TODO check that the saved model is correct (after restoring)
     saver.restore(sess, tf.train.latest_checkpoint(
       os.path.join(experiment_dir, 'train')))
     tf.logging.info('Checkpoints restored.')
@@ -367,7 +364,7 @@ def save_model(dataset, generator, facenet, experiment_dir):
                                os.path.join(experiment_dir, "saved_model"),
                                inputs={'masked_image': masked_images,
                                        'reference_image': reference_images},
-                               outputs={'patched_image': generated_images})
+                               outputs={'output_image': generated_images})
 
 def get_read_images_from_fs_fn(dataset_fs, base_path):
   def read_images_from_fs(image_path):
@@ -433,6 +430,16 @@ def main(args):
     assert args.run_mode == SAVE_MODEL_RUN_MODE
     tf.logging.info("Creating model for inference")
 
+  # TODO testing, switch back to train=(args.run_mode == TRAIN_RUN_MODE)
+  # generator, local_discriminator, global_discriminator, facenet = model.make_models(
+  #   args.facenet_dir, train=(args.run_mode == TRAIN_RUN_MODE))
+  generator, local_discriminator, global_discriminator, facenet = model.make_models(
+    args.facenet_dir, train=True)
+
+  if args.run_mode == SAVE_MODEL_RUN_MODE:
+    save_model(generator, args.experiment_dir)
+    return
+
   BATCH_SIZE = args.batch_size
 
   # TODO this shouldn't be required now, change the train and eval directories to be equal inside
@@ -495,18 +502,13 @@ def main(args):
     full_dataset = tf.data.Dataset.zip((real_dataset, masked_dataset))
     full_dataset = full_dataset.prefetch(1)
 
-    generator, local_discriminator, global_discriminator, facenet = model.make_models(
-      args.facenet_dir, train=(args.run_mode==TRAIN_RUN_MODE))
-
-    if args.run_mode == TRAIN_RUN_MODE:
-      train(full_dataset, generator, local_discriminator, global_discriminator,
-            facenet, args.experiment_dir)
-    elif args.run_mode == EVAL_RUN_MODE:
-      evaluate(full_dataset, generator, local_discriminator,
-               global_discriminator,
-               facenet, args.experiment_dir)
-    else:
-      save_model(full_dataset, generator, facenet, args.experiment_dir)
+  if args.run_mode == TRAIN_RUN_MODE:
+    train(full_dataset, generator, local_discriminator, global_discriminator,
+          facenet, args.experiment_dir)
+  elif args.run_mode == EVAL_RUN_MODE:
+    evaluate(full_dataset, generator, local_discriminator,
+             global_discriminator,
+             facenet, args.experiment_dir)
 
 if __name__ == "__main__":
   tf.logging.info("Parsing flags")
