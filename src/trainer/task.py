@@ -148,12 +148,12 @@ def patch_image(patch, image):
   return tf.concat([upper_edge, middle, lower_edge], axis=1)
 
 
-def train_step(sess, train_ops, gen_loss, local_disc_loss,
+def train_step(sess, optimizers, gen_loss, local_disc_loss,
                global_disc_loss,
                global_step):
   (_, gen_loss_value, local_disc_loss_value, global_disc_loss_value,
    step_value) = sess.run(
-    [train_ops, gen_loss, local_disc_loss, global_disc_loss, global_step])
+    [optimizers, gen_loss, local_disc_loss, global_disc_loss, global_step])
 
   # Divide by 3 because we increment the global_step 3 times per each train_step.
   if (step_value // 3) % (STEPS_PER_PRINT // 3) == 0:
@@ -229,7 +229,6 @@ def train(dataset, generator, local_discriminator, global_discriminator,
     global_discriminator.inputs)
 
   tf.logging.debug("num_gen_update_ops: {}".format(len(gen_update_ops)))
-  tf.logging.debug("gen_update_ops type: {}".format(type(gen_update_ops)))
   tf.logging.debug("gen_update_ops: {}".format(gen_update_ops))
 
   tf.logging.debug(
@@ -242,34 +241,30 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   tf.logging.debug(
     "global_disc_update_ops: {}".format(global_disc_update_ops))
 
+  with tf.control_dependencies(gen_update_ops):
+    # TODO check that this is the correct way to use optimizer with keras.
+    gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
+      gen_loss, var_list=generator.variables,
+      global_step=global_step)
 
-  # TODO check that this is the correct way to use optimizer with keras.
-  gen_optimizer_op = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
-    gen_loss, var_list=generator.variables,
-    global_step=global_step)
+    # TODO check that this works
+    # tf.logging.info('Generator variables {}'.format([v.name for v in generator.variables]))
 
-  # TODO check that this works
-  # tf.logging.info('Generator variables {}'.format([v.name for v in generator.variables]))
+  with tf.control_dependencies(local_disc_update_ops):
+    # TODO Seems that the disc optimizer is propagating changes to the generator.
+    local_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+      local_disc_loss, var_list=local_discriminator.variables,
+      global_step=global_step)
+    # tf.logging.info('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
 
-  # TODO Seems that the disc optimizer is propagating changes to the generator.
-  local_disc_optimizer_op = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
-    local_disc_loss, var_list=local_discriminator.variables,
-    global_step=global_step)
-  # tf.logging.info('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
+  with tf.control_dependencies(global_disc_update_ops):
+    global_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+      global_disc_loss, var_list=global_discriminator.variables,
+      global_step=global_step)
+    # tf.logging.info('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
 
-  global_disc_optimizer_op = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
-    global_disc_loss, var_list=global_discriminator.variables,
-    global_step=global_step)
-  # tf.logging.info('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
-
-  tf.logging.debug("Gen optimizer: {}".format(gen_optimizer_op))
-
-  gen_train_ops = tf.group([gen_update_ops, gen_optimizer_op])
-  local_disc_train_ops = tf.group([local_disc_update_ops, local_disc_optimizer_op])
-  global_disc_train_ops = tf.group([global_disc_update_ops, global_disc_optimizer_op])
-
-  train_ops = tf.group(
-    [gen_train_ops, local_disc_train_ops, global_disc_train_ops])
+  optimizers = tf.group(
+    [gen_optimizer, local_disc_optimizer, global_disc_optimizer])
 
 
   tf.summary.scalar('gen_loss', gen_loss)
@@ -283,7 +278,7 @@ def train(dataset, generator, local_discriminator, global_discriminator,
           checkpoint_dir=os.path.join(experiment_dir, "train"),
           hooks=hooks) as sess:
     while not sess.should_stop():
-      train_step(sess, train_ops, gen_loss, local_disc_loss,
+      train_step(sess, optimizers, gen_loss, local_disc_loss,
                  global_disc_loss,
                  global_step)
 
