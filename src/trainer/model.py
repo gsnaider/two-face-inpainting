@@ -6,7 +6,9 @@ import tempfile
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
 
+
 # In tf <= 1.10, min input size for vgg is 48x48
+# TODO when ML Engine supports tf > 1.10, don't expand the patch size.
 EXPANDED_PATCH_SIZE = 48
 
 class ChannelWiseFCLayer(tf.keras.layers.Layer):
@@ -52,6 +54,12 @@ def make_generator_encoder(train):
     input_encoder.layers[-1].output)
 
   # 16x16x512
+
+  # This correctly obtains the batch normalization update_ops
+  # batch_norm_layer = tf.keras.layers.BatchNormalization()
+  # gen_encoder = batch_norm_layer(gen_encoder, training=train)
+  # tf.logging.info('Batch Norm Layer update_ops {}'.format(len(batch_norm_layer.get_updates_for(input_encoder.inputs))))
+
   gen_encoder = tf.keras.layers.BatchNormalization()(gen_encoder, training=train)
   gen_encoder = tf.keras.layers.LeakyReLU()(gen_encoder)
 
@@ -114,7 +122,13 @@ def make_generator_model(train=False):
                                              use_bias=False,
                                              input_shape=(16, 16, 256))(
     encoding)
-  encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
+
+  bn_layer = tf.keras.layers.BatchNormalization()
+  bn_input = encoding
+  encoding = bn_layer(bn_input, training=train)
+  update_ops = bn_layer.get_updates_for(bn_input)
+
+
   encoding = tf.keras.layers.LeakyReLU()(encoding)
   # 16x16x128
 
@@ -140,7 +154,7 @@ def make_generator_model(train=False):
   # 32x32x3
 
   return tf.keras.Model(inputs=[masked_image, reference_image],
-                        outputs=generated_patch)
+                        outputs=generated_patch), update_ops
 
 
 def make_local_discriminator_model(train):
@@ -326,7 +340,7 @@ def discriminator_loss(real_output, generated_output, lambda_adv):
 
 def make_models(facenet_dir, train=False):
 
-  generator = make_generator_model(train)
+  generator, gen_update_ops = make_generator_model(train)
   local_discriminator = make_local_discriminator_model(train)
   global_discriminator = make_global_discriminator_model(train)
   facenet = make_identity_model(facenet_dir)
@@ -343,4 +357,4 @@ def make_models(facenet_dir, train=False):
   tf.logging.info('Facenet')
   facenet.summary()
 
-  return generator, local_discriminator, global_discriminator, facenet
+  return generator, local_discriminator, global_discriminator, facenet, gen_update_ops

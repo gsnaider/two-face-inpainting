@@ -171,7 +171,7 @@ def expand_patches(patches):
 
 
 def train(dataset, generator, local_discriminator, global_discriminator,
-          facenet, experiment_dir):
+          facenet, experiment_dir, gen_update_ops):
   # TODO This didn't fixed BN. See if we can use it.
   # all new operations will be in train mode from now on
   tf.keras.backend.set_learning_phase(1)
@@ -222,25 +222,26 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   # This is required for the batch_normalization layers.
   # https://github.com/tensorflow/tensorflow/issues/16455
 
-  gen_update_ops = generator.get_updates_for(generator.inputs)
-  local_disc_update_ops = local_discriminator.get_updates_for(
-    local_discriminator.inputs)
-  global_disc_update_ops = global_discriminator.get_updates_for(
-    global_discriminator.inputs)
+  # gen_update_ops = generator.get_updates_for(generator.inputs)
+  # local_disc_update_ops = local_discriminator.get_updates_for(
+  #   local_discriminator.inputs)
+  # global_disc_update_ops = global_discriminator.get_updates_for(
+  #   global_discriminator.inputs)
 
   tf.logging.debug("num_gen_update_ops: {}".format(len(gen_update_ops)))
   tf.logging.debug("gen_update_ops: {}".format(gen_update_ops))
 
-  tf.logging.debug(
-    "num_local_disc_update_ops: {}".format(len(local_disc_update_ops)))
-  tf.logging.debug(
-    "local_disc_update_ops: {}".format(local_disc_update_ops))
+  # tf.logging.debug(
+  #   "num_local_disc_update_ops: {}".format(len(local_disc_update_ops)))
+  # tf.logging.debug(
+  #   "local_disc_update_ops: {}".format(local_disc_update_ops))
+  #
+  # tf.logging.debug(
+  #   "num_global_disc_update_ops: {}".format(len(global_disc_update_ops)))
+  # tf.logging.debug(
+  #   "global_disc_update_ops: {}".format(global_disc_update_ops))
 
-  tf.logging.debug(
-    "num_global_disc_update_ops: {}".format(len(global_disc_update_ops)))
-  tf.logging.debug(
-    "global_disc_update_ops: {}".format(global_disc_update_ops))
-
+  # with tf.control_dependencies(gen_update_ops + local_disc_update_ops + global_disc_update_ops):
   with tf.control_dependencies(gen_update_ops):
     # TODO check that this is the correct way to use optimizer with keras.
     gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
@@ -250,14 +251,12 @@ def train(dataset, generator, local_discriminator, global_discriminator,
     # TODO check that this works
     # tf.logging.info('Generator variables {}'.format([v.name for v in generator.variables]))
 
-  with tf.control_dependencies(local_disc_update_ops):
     # TODO Seems that the disc optimizer is propagating changes to the generator.
     local_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
       local_disc_loss, var_list=local_discriminator.variables,
       global_step=global_step)
     # tf.logging.info('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
 
-  with tf.control_dependencies(global_disc_update_ops):
     global_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
       global_disc_loss, var_list=global_discriminator.variables,
       global_step=global_step)
@@ -463,7 +462,7 @@ def main(args):
     tf.logging.info("Creating model for inference")
 
   # TODO testing, switch back to train
-  generator, local_discriminator, global_discriminator, facenet = model.make_models(
+  generator, local_discriminator, global_discriminator, facenet, gen_update_ops = model.make_models(
     args.facenet_dir, train=(args.run_mode == TRAIN_RUN_MODE))
   # generator, local_discriminator, global_discriminator, facenet = model.make_models(
   #   args.facenet_dir, train=True)
@@ -536,7 +535,7 @@ def main(args):
 
     if args.run_mode == TRAIN_RUN_MODE:
       train(full_dataset, generator, local_discriminator, global_discriminator,
-            facenet, args.experiment_dir)
+            facenet, args.experiment_dir, gen_update_ops)
     elif args.run_mode == EVAL_RUN_MODE:
       evaluate(full_dataset, generator, local_discriminator,
                global_discriminator,
