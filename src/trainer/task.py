@@ -28,7 +28,7 @@ MASKED_DATASET_PATHS_FILE = "masked-files.txt"
 REFERENCE_DATASET_PATHS_FILE = "reference-files.txt"
 
 STEPS_PER_PRINT = 20
-EVAL_SAVE_SECS=120
+EVAL_SAVE_SECS = 120
 
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
@@ -37,18 +37,19 @@ PATH_FILE_BUFFER_SIZE = 1000000
 SHUFFLE_BUFFER_SIZE = 1000
 PARALLEL_MAP_THREADS = 16
 
-MAX_STEPS = 6000
+# TODO pasar por parametros
+MAX_STEPS = 1e6
 
-GEN_LEARNING_RATE = 1e-4
-DISC_LEARNING_RATE = 1e-4
+GEN_LEARNING_RATE = 1e-6
+DISC_LEARNING_RATE = 1e-6
 
 LAMBDA_REC = 1.0
-LAMBDA_ADV_LOCAL = 0.0  # 0.01
-LAMBDA_ADV_GLOBAL = 0.0  # 0.01
-LAMBDA_ID = 0.0  # 0.1
+LAMBDA_ADV_LOCAL = 0.01  # 0.01
+LAMBDA_ADV_GLOBAL = 0.001  # 0.001
+LAMBDA_ID = 0.001  # 0.001
 
 LAMBDA_LOCAL_DISC = 0.1  # 0.1
-LAMBDA_GLOBAL_DISC = 0.0  # 0.1
+LAMBDA_GLOBAL_DISC = 0.1  # 0.1
 
 
 def get_reference_image_path_fn(train_reference_paths_dict):
@@ -147,12 +148,12 @@ def patch_image(patch, image):
   return tf.concat([upper_edge, middle, lower_edge], axis=1)
 
 
-def train_step(sess, optimizers, gen_loss, local_disc_loss,
+def train_step(sess, train_ops, gen_loss, local_disc_loss,
                global_disc_loss,
                global_step):
   (_, gen_loss_value, local_disc_loss_value, global_disc_loss_value,
    step_value) = sess.run(
-    [optimizers, gen_loss, local_disc_loss, global_disc_loss, global_step])
+    [train_ops, gen_loss, local_disc_loss, global_disc_loss, global_step])
 
   # Divide by 3 because we increment the global_step 3 times per each train_step.
   if (step_value // 3) % (STEPS_PER_PRINT // 3) == 0:
@@ -171,10 +172,9 @@ def expand_patches(patches):
 
 def train(dataset, generator, local_discriminator, global_discriminator,
           facenet, experiment_dir):
-
   # TODO This didn't fixed BN. See if we can use it.
   # all new operations will be in train mode from now on
-  # tf.keras.backend.set_learning_phase(1)
+  tf.keras.backend.set_learning_phase(1)
 
   global_step = tf.train.get_or_create_global_step()
 
@@ -220,29 +220,57 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                                   LAMBDA_ID, facenet)
 
   # This is required for the batch_normalization layers.
-  update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-  with tf.control_dependencies(update_ops):
-    # TODO check that this is the correct way to use optimizer with keras.
-    gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
-      gen_loss, var_list=generator.variables,
-      global_step=global_step)
+  # https://github.com/tensorflow/tensorflow/issues/16455
 
-    # TODO check that this works
-    # tf.logging.info('Generator variables {}'.format([v.name for v in generator.variables]))
+  gen_update_ops = generator.get_updates_for(generator.inputs)
+  local_disc_update_ops = local_discriminator.get_updates_for(
+    local_discriminator.inputs)
+  global_disc_update_ops = global_discriminator.get_updates_for(
+    global_discriminator.inputs)
 
-    # TODO Seems that the disc optimizer is propagating changes to the generator.
-    local_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
-      local_disc_loss, var_list=local_discriminator.variables,
-      global_step=global_step)
+  tf.logging.debug("num_gen_update_ops: {}".format(len(gen_update_ops)))
+  tf.logging.debug("gen_update_ops type: {}".format(type(gen_update_ops)))
+  tf.logging.debug("gen_update_ops: {}".format(gen_update_ops))
 
-    # tf.logging.info('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
+  tf.logging.debug(
+    "num_local_disc_update_ops: {}".format(len(local_disc_update_ops)))
+  tf.logging.debug(
+    "local_disc_update_ops: {}".format(local_disc_update_ops))
 
-    global_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
-      global_disc_loss, var_list=global_discriminator.variables,
-      global_step=global_step)
-    optimizers = tf.group([gen_optimizer, local_disc_optimizer, global_disc_optimizer])
+  tf.logging.debug(
+    "num_global_disc_update_ops: {}".format(len(global_disc_update_ops)))
+  tf.logging.debug(
+    "global_disc_update_ops: {}".format(global_disc_update_ops))
 
+
+  # TODO check that this is the correct way to use optimizer with keras.
+  gen_optimizer_op = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
+    gen_loss, var_list=generator.variables,
+    global_step=global_step)
+
+  # TODO check that this works
+  # tf.logging.info('Generator variables {}'.format([v.name for v in generator.variables]))
+
+  # TODO Seems that the disc optimizer is propagating changes to the generator.
+  local_disc_optimizer_op = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+    local_disc_loss, var_list=local_discriminator.variables,
+    global_step=global_step)
+  # tf.logging.info('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
+
+  global_disc_optimizer_op = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+    global_disc_loss, var_list=global_discriminator.variables,
+    global_step=global_step)
   # tf.logging.info('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
+
+  tf.logging.debug("Gen optimizer: {}".format(gen_optimizer_op))
+
+  gen_train_ops = tf.group([gen_update_ops, gen_optimizer_op])
+  local_disc_train_ops = tf.group([local_disc_update_ops, local_disc_optimizer_op])
+  global_disc_train_ops = tf.group([global_disc_update_ops, global_disc_optimizer_op])
+
+  train_ops = tf.group(
+    [gen_train_ops, local_disc_train_ops, global_disc_train_ops])
+
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
@@ -255,16 +283,16 @@ def train(dataset, generator, local_discriminator, global_discriminator,
           checkpoint_dir=os.path.join(experiment_dir, "train"),
           hooks=hooks) as sess:
     while not sess.should_stop():
-      train_step(sess, optimizers, gen_loss, local_disc_loss,
+      train_step(sess, train_ops, gen_loss, local_disc_loss,
                  global_disc_loss,
                  global_step)
 
+
 def evaluate(dataset, generator, local_discriminator, global_discriminator,
              facenet, experiment_dir):
-
   # TODO This didn't fixed BN. See if we can use it.
   # all new operations will be in test mode from now on
-  # tf.keras.backend.set_learning_phase(0)
+  tf.keras.backend.set_learning_phase(0)
 
   global_step = tf.train.get_or_create_global_step()
 
@@ -308,6 +336,17 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
                                   global_generated_output, LAMBDA_REC,
                                   LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL,
                                   LAMBDA_ID, facenet)
+
+  tf.logging.debug("num_gen_update_ops: {}".format(
+    len(generator.get_updates_for(generator.inputs))))
+  tf.logging.debug(
+    "num_local_disc_update_ops: {}".format(
+      len(local_discriminator.get_updates_for(
+        local_discriminator.inputs))))
+  tf.logging.debug(
+    "num_global_disc_update_ops: {}".format(
+      len(global_discriminator.get_updates_for(
+        global_discriminator.inputs))))
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
@@ -359,10 +398,12 @@ def save_model(generator, experiment_dir, model_number):
     tf.logging.info('Checkpoints restored.')
 
     tf.saved_model.simple_save(sess,
-                               os.path.join(experiment_dir, "saved_model", str(model_number)),
+                               os.path.join(experiment_dir, "saved_model",
+                                            str(model_number)),
                                inputs={'masked_image': masked_images,
                                        'reference_image': reference_images},
                                outputs={'output_image': generated_images})
+
 
 def get_read_images_from_fs_fn(dataset_fs, base_path):
   def read_images_from_fs(image_path):
@@ -417,8 +458,6 @@ def copy_dataset_to_mem_fs(mem_fs, dataset_zip_file_path):
         fs.copy.copy_dir(zip_fs, '.', mem_fs, '.')
 
 
-
-# TODO add flag for saving model
 def main(args):
   if args.run_mode == TRAIN_RUN_MODE:
     tf.logging.info("Starting training")
@@ -507,6 +546,7 @@ def main(args):
       evaluate(full_dataset, generator, local_discriminator,
                global_discriminator,
                facenet, args.experiment_dir)
+
 
 if __name__ == "__main__":
   tf.logging.info("Parsing flags")
