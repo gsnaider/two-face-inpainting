@@ -222,11 +222,17 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   # This is required for the batch_normalization layers.
   # https://github.com/tensorflow/tensorflow/issues/16455
 
-  gen_update_ops = generator.get_updates_for(generator.inputs)
-  local_disc_update_ops = local_discriminator.get_updates_for(
-    local_discriminator.inputs)
-  global_disc_update_ops = global_discriminator.get_updates_for(
-    global_discriminator.inputs)
+  # update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+
+  # gen_update_ops = generator.get_updates_for(generator.inputs)
+  # local_disc_update_ops = local_discriminator.get_updates_for(
+  #   local_discriminator.inputs)
+  # global_disc_update_ops = global_discriminator.get_updates_for(
+  #   global_discriminator.inputs)
+
+  gen_update_ops = generator.updates
+  local_disc_update_ops = local_discriminator.updates
+  global_disc_update_ops = global_discriminator.updates
 
   tf.logging.debug("num_gen_update_ops: {}".format(len(gen_update_ops)))
   tf.logging.debug("gen_update_ops: {}".format(gen_update_ops))
