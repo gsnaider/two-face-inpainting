@@ -3,8 +3,6 @@
 EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/checkpoints"
 rm -rf $EXPERIMENT_DIR/*
 
-EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/save_model_test_2"
-
 DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data/train_data"
 # DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data/train_data/data.zip"
 # DATASET_PATH="gs://two-face-inpainting-mlengine/sample-data"
@@ -21,4 +19,4 @@ gcloud ml-engine local train \
     --facenet_dir $FACENET_DIR \
     --batch_size 8 \
     --run_mode "TRAIN" \
-    --verbosity "INFO"
+    --verbosity "DEBUG"
