@@ -73,11 +73,13 @@ def make_generator_model(train=False):
   mask_encoder = make_generator_encoder(train)
   reference_encoder = make_generator_encoder(train)
 
-  masked_image = tf.keras.Input(shape=(128, 128, 3,), name='masked_image')
+  masked_image = tf.keras.Input(shape=(128, 128, 3,), name='masked_image',
+                                tensor=tf.ones([1, 128, 128, 3]))
   masked_encoding = mask_encoder(masked_image)
   # 8x8x512
 
-  reference_image = tf.keras.Input(shape=(128, 128, 3,), name='reference_image')
+  reference_image = tf.keras.Input(shape=(128, 128, 3,), name='reference_image',
+                                tensor=tf.ones([1, 128, 128, 3]))
   reference_encoding = reference_encoder(reference_image)
   # 8x8x512
 
@@ -145,7 +147,8 @@ def make_generator_model(train=False):
 
 def make_local_discriminator_model(train):
   patch = tf.keras.Input(shape=(EXPANDED_PATCH_SIZE, EXPANDED_PATCH_SIZE, 3,),
-                         name='patch')
+                         name='patch',
+                         tensor=tf.ones([1, EXPANDED_PATCH_SIZE, EXPANDED_PATCH_SIZE, 3]))
 
   vgg16 = tf.keras.applications.vgg16.VGG16(include_top=False,
                                             weights='imagenet',
@@ -206,7 +209,8 @@ def make_global_discriminator_model(train):
   for layer in disc_encoder.layers[:10]:
     layer.trainable = False
 
-  image = tf.keras.Input(shape=(128, 128, 3,), name='image')
+  image = tf.keras.Input(shape=(128, 128, 3,), name='image',
+                         tensor=tf.ones([1, 128, 128, 3]))
 
   disc_encoder = disc_encoder(image)
   # 4x4x64
