@@ -35,8 +35,8 @@ loss_op = tf.nn.l2_loss(predictions - train_y)
 
 update_ops = model.updates
 print(update_ops)
-# with tf.control_dependencies(update_ops):
-train_op = tf.train.AdamOptimizer().minimize(loss_op, global_step=global_step)
+with tf.control_dependencies(update_ops):
+  train_op = tf.train.AdamOptimizer().minimize(loss_op, global_step=global_step)
 
 hooks = [tf.train.StopAtStepHook(num_steps=100000)]
 with tf.train.MonitoredTrainingSession(hooks=hooks) as sess:
