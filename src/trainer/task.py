@@ -513,13 +513,10 @@ def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
     image_content = tf.py_func(
       get_read_images_from_fs_fn(dataset_fs, base_path), [img_filename],
       tf.string)
-    image = tf.image.decode_image(image_content, channels=3)
+    image = tf.image.decode_jpeg(image_content, channels=3)
 
-    # TODO see if it's worth to use tf.image.resize_images along with tf.image.decode_jpeg.
-    # But that would have the problem that we need to analyze the full image, not just the face.
-    # By cropping, we only remain with the face.
-    image = tf.image.resize_image_with_crop_or_pad(image, IMAGE_SIZE,
-                                                   IMAGE_SIZE)
+    image = tf.image.resize_images(image, [IMAGE_SIZE,
+                                                   IMAGE_SIZE])
     image = tf.image.convert_image_dtype(image, tf.float32)
 
     if masked:
@@ -531,9 +528,9 @@ def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
         [reference_image_filename],
         tf.string)
 
-      reference = tf.image.decode_image(reference_content, channels=3)
-      reference = tf.image.resize_image_with_crop_or_pad(reference, IMAGE_SIZE,
-                                                         IMAGE_SIZE)
+      reference = tf.image.decode_jpeg(reference_content, channels=3)
+      reference = tf.image.resize_images(reference, [IMAGE_SIZE,
+                                                         IMAGE_SIZE])
       reference = tf.image.convert_image_dtype(reference, tf.float32)
 
       mask_image = get_mask_fn(IMAGE_SIZE, PATCH_SIZE)(image)
