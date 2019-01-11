@@ -9,6 +9,7 @@ PATCH_SIZE = 32
 # In tf <= 1.10, min input size for vgg is 48x48
 EXPANDED_PATCH_SIZE = 48
 
+# TODO change the model from functional API to Model subclassing
 
 class ChannelWiseFCLayer(tf.keras.layers.Layer):
   def __init__(self):
