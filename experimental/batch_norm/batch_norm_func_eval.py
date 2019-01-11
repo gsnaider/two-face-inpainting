@@ -6,17 +6,18 @@ import tensorflow as tf
 
 def make_model(input_tensor):
   with tf.name_scope('my_model'):
-    x = tf.keras.layers.Input(shape=(1,), dtype=tf.float64, name='model_input',
+    input = tf.keras.layers.Input(shape=(1,), dtype=tf.float64, name='model_input',
                               tensor=input_tensor)
 
+    x = tf.keras.layers.Dense(5)(input)
     bn = tf.keras.layers.BatchNormalization()
-    h1 = bn(x)
-    h2 = tf.keras.layers.ReLU()(h1)
-    y = tf.keras.layers.Dense(1)(h2)
+    x = bn(x)
+    x = tf.keras.layers.ReLU()(x)
+    y = tf.keras.layers.Dense(1)(x)
 
     # y = tf.keras.layers.Dense(1)(x)
 
-    model = tf.keras.models.Model(inputs=x, outputs=y)
+    model = tf.keras.models.Model(inputs=input, outputs=y)
 
   return model
 
@@ -71,15 +72,15 @@ loss_op = loss_op1 + loss_op2
 # loss_op = loss_op1
 # loss_op = loss_op2
 
-bn_weights = model.layers[1].weights
+bn_weights = model.layers[2].weights
 print("BN Weights {}".format(bn_weights))
 
 hooks = [tf.train.StopAtStepHook(num_steps=1000000)]
 with tf.train.SingularMonitoredSession(
-        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm/train") as sess:
+        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_func/train") as sess:
 
   writer = tf.summary.FileWriter(
-    "/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm/eval",
+    "/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_func/eval",
     sess.graph)
 
   print("Gamma {} - Beta {} - Moving mean {} - Moving variance {}".format(

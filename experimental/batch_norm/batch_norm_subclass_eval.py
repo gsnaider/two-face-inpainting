@@ -85,11 +85,11 @@ print("BN Weights {}".format(bn_weights))
 print("BN layer: {}".format(model.layers[0]))
 
 with tf.train.SingularMonitoredSession(
-        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_2/train") as sess:
+        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_subclass/train") as sess:
   tf.logging.info("Starting evaluation.")
 
   writer = tf.summary.FileWriter(
-    "/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_2/eval", sess.graph)
+    "/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_subclass/eval", sess.graph)
 
   print("Gamma {} - Beta {} - Moving mean {} - Moving variance {}".format(
     *sess.run(

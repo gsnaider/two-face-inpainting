@@ -4,17 +4,19 @@ import tensorflow as tf
 
 def make_model(input_tensor):
   with tf.name_scope('my_model'):
-    x = tf.keras.layers.Input(shape=(1,), dtype=tf.float64, name='model_input',
-                              tensor=input_tensor)
+    input = tf.keras.layers.Input(shape=(1,), dtype=tf.float64,
+                                  name='model_input',
+                                  tensor=input_tensor)
 
+    x = tf.keras.layers.Dense(5)(input)
     bn = tf.keras.layers.BatchNormalization()
-    h1 = bn(x)
-    h2 = tf.keras.layers.ReLU()(h1)
-    y = tf.keras.layers.Dense(1)(h2)
+    x = bn(x)
+    x = tf.keras.layers.ReLU()(x)
+    y = tf.keras.layers.Dense(1)(x)
 
     # y = tf.keras.layers.Dense(1)(x)
 
-    model = tf.keras.models.Model(inputs=x, outputs=y)
+    model = tf.keras.models.Model(inputs=input, outputs=y)
 
   return model
 
@@ -32,8 +34,10 @@ train_y = train_x * 5 + 2
 train_x2 = tf.convert_to_tensor(np.random.rand(200, 1), name="dataset_2")
 train_y2 = train_x2 * 5 + 2
 
-dataset1 = tf.data.Dataset.from_tensor_slices((train_x, train_y)).shuffle(50).batch(10).repeat()
-dataset2 = tf.data.Dataset.from_tensor_slices((train_x2, train_y2)).shuffle(50).batch(10).repeat()
+dataset1 = tf.data.Dataset.from_tensor_slices((train_x, train_y)).shuffle(
+  50).batch(10).repeat()
+dataset2 = tf.data.Dataset.from_tensor_slices((train_x2, train_y2)).shuffle(
+  50).batch(10).repeat()
 
 iterator_1 = dataset1.make_one_shot_iterator()
 next_1 = iterator_1.get_next()
@@ -68,17 +72,17 @@ update_ops = model.updates
 print("Update ops: {}".format(update_ops))
 
 with tf.control_dependencies(update_ops):
-  train_op = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(loss_op, global_step=global_step)
+  train_op = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(loss_op,
+                                                                   global_step=global_step)
 
-bn_weights = model.layers[1].weights
+bn_weights = model.layers[2].weights
 print("BN Weights {}".format(bn_weights))
 
 hooks = [tf.train.StopAtStepHook(num_steps=1000000)]
 with tf.train.MonitoredTrainingSession(
-        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm/train",
+        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_func/train",
         save_checkpoint_steps=1000,
         hooks=hooks) as sess:
-
   print("Gamma {} - Beta {} - Moving mean {} - Moving variance {}".format(
     *sess.run(
       bn_weights)))
@@ -87,8 +91,8 @@ with tf.train.MonitoredTrainingSession(
     (_, loss, step_value, model_vars) = sess.run(
       [train_op, loss_op, global_step, model.weights])
     if (step_value % 100 == 0):
-      print(
-        "Step {} - Loss: {} - Model {}".format(step_value, loss, model_vars))
+      print("Step {} - Loss: {}".format(step_value, loss))
+      # print("Model {}".format(model_vars))
 
       print("Gamma {} - Beta {} - Moving mean {} - Moving variance {}".format(
         *sess.run(

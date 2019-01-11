@@ -88,7 +88,7 @@ bn_weights = model.layers[0].weights
 print("BN Weights {}".format(bn_weights))
 
 with tf.train.MonitoredTrainingSession(
-        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_2/train",
+        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_subclass/train",
         save_checkpoint_steps=1000,
         hooks=hooks) as sess:
   print("Gamma {} - Beta {} - Moving mean {} - Moving variance {}".format(
