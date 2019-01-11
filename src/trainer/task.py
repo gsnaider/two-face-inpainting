@@ -37,10 +37,10 @@ PARALLEL_MAP_THREADS = 16
 # TODO pasar por parametros
 MAX_STEPS = 1e6
 
-GEN_LEARNING_RATE = 1e-6
-DISC_LEARNING_RATE = 1e-6
+GEN_LEARNING_RATE = 1e-5
+DISC_LEARNING_RATE = 1e-5
 
-LAMBDA_REC = 1.0
+LAMBDA_REC = 1.0 # 1.0
 LAMBDA_ADV_LOCAL = 0.0  # 0.01
 LAMBDA_ADV_GLOBAL = 0.0 # 0.001
 LAMBDA_ID = 0.0  # 0.001
@@ -333,8 +333,8 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
   # all new operations will be in test mode from now on
   tf.keras.backend.set_learning_phase(0)
 
-  # TODO check if the global step is incremented on eval
-  # Since we don't have optimizers here, maybe we need to increment it manually.
+  # TODO verify that global step is updated every 10 minutes (when running train and eval in parallel).
+  # This is because the summaries from the train run are saved every 10 minutes.
   global_step = tf.train.get_or_create_global_step()
 
   dataset = dataset.repeat()
@@ -419,16 +419,17 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
   #   output_dir=os.path.join(experiment_dir, "eval"),
   #   summary_op=tf.summary.merge_all())]
 
-  writer = tf.summary.FileWriter(os.path.join(experiment_dir, "eval"))
   summary_op = tf.summary.merge_all()
 
   # Have to do this because for some reason the checkpoints are not being updated.
   # TODO see if this could be done better.
-  while True:
-    with tf.train.SingularMonitoredSession(
-            checkpoint_dir=os.path.join(experiment_dir, "train")) as sess:
-      tf.logging.info("Starting evaluation.")
+  with tf.train.SingularMonitoredSession(
+          checkpoint_dir=os.path.join(experiment_dir, "train")) as sess:
+    tf.logging.info("Starting evaluation.")
 
+    writer = tf.summary.FileWriter(os.path.join(experiment_dir, "eval"), sess.graph)
+
+    while True:
       tf.logging.debug(
         "GEN_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
           *sess.run(
@@ -466,12 +467,16 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
         'Gen_loss: {} - Local_disc_loss: {} - Global_disc_loss: {}'.format(
           gen_loss_value, local_disc_loss_value, global_disc_loss_value))
       writer.add_summary(sess.run(summary_op), global_step_value)
-    time.sleep(EVAL_SAVE_SECS)
+
+      time.sleep(EVAL_SAVE_SECS)
 
 
 def save_model(generator, experiment_dir, model_number):
   # TODO if we add namespace to the models, we shouldn't need to create the
   # whole model here, only the generator
+
+  tf.keras.backend.set_learning_phase(0)
+
   global_step = tf.train.get_or_create_global_step()
 
   masked_images = tf.placeholder(tf.float32, name='masked_images_ph')
@@ -562,8 +567,13 @@ def main(args):
     assert args.run_mode == SAVE_MODEL_RUN_MODE
     tf.logging.info("Creating model for inference")
 
+  # Have to use train=True, otherwise the images generated are saturated for some
+  # reason, probably because Batch Normalization.
+  # TODO try removing Batch Normalization and see if this is solved.
   generator, local_discriminator, global_discriminator, facenet = model.make_models(
-    args.facenet_dir, train=(args.run_mode == TRAIN_RUN_MODE))
+    args.facenet_dir, train=True)
+  # generator, local_discriminator, global_discriminator, facenet = model.make_models(
+  #   args.facenet_dir, train=(args.run_mode == TRAIN_RUN_MODE))
 
   if args.run_mode == SAVE_MODEL_RUN_MODE:
     save_model(generator, args.experiment_dir, args.model_number)
