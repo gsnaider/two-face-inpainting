@@ -248,20 +248,18 @@ def train(dataset, generator, local_discriminator, global_discriminator,
     gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
       gen_loss, var_list=generator.variables,
       global_step=global_step)
-
-    # TODO check that this works
-    # tf.logging.debug('Generator variables {}'.format([v.name for v in generator.variables]))
+    tf.logging.debug('Generator variables {}'.format([v.name for v in generator.variables]))
 
     # TODO Seems that the disc optimizer is propagating changes to the generator.
     local_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
       local_disc_loss, var_list=local_discriminator.variables,
       global_step=global_step)
-    # tf.logging.debug('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
+    tf.logging.debug('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
 
     global_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
       global_disc_loss, var_list=global_discriminator.variables,
       global_step=global_step)
-    # tf.logging.debug('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
+    tf.logging.debug('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
 
   optimizers = tf.group(
     [gen_optimizer, local_disc_optimizer, global_disc_optimizer])
@@ -290,10 +288,10 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   hooks = [tf.train.StopAtStepHook(num_steps=MAX_STEPS)]
   with tf.train.MonitoredTrainingSession(
           checkpoint_dir=os.path.join(experiment_dir, "train"),
-          # TODO testing, remove the save_checkpoints_secs
-          save_checkpoint_secs=60,
           hooks=hooks) as sess:
     while not sess.should_stop():
+
+      # TODO remove these (and all other related debug logs) after verifying BN works correctly.
       tf.logging.debug(
         "GEN_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
           *sess.run(
