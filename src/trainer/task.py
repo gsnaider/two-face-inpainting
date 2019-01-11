@@ -279,8 +279,11 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
   tf.summary.scalar('global_disc_loss', global_disc_loss)
+
   tf.summary.image('generated_train_images', generated_images, max_outputs=8)
-  tf.summary.image('reference_images', reference_images, max_outputs=8)
+  tf.summary.image('masked_train_image', masked_images, max_outputs=8)
+  tf.summary.image('original_train_image', unmasked_images, max_outputs=8)
+  tf.summary.image('reference_train_images', reference_images, max_outputs=8)
 
   hooks = [tf.train.StopAtStepHook(num_steps=MAX_STEPS)]
   with tf.train.MonitoredTrainingSession(
@@ -405,8 +408,10 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
   tf.summary.scalar('global_disc_loss', global_disc_loss)
-  tf.summary.image('original_eval_images', unmasked_images, max_outputs=8)
+
   tf.summary.image('generated_eval_images', generated_images, max_outputs=8)
+  tf.summary.image('original_eval_images', unmasked_images, max_outputs=8)
+  tf.summary.image('masked_eval_image', masked_images, max_outputs=8)
   tf.summary.image('reference_eval_images', reference_images, max_outputs=8)
 
   # hooks = [tf.train.SummarySaverHook(
@@ -509,6 +514,10 @@ def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
       get_read_images_from_fs_fn(dataset_fs, base_path), [img_filename],
       tf.string)
     image = tf.image.decode_image(image_content, channels=3)
+
+    # TODO see if it's worth to use tf.image.resize_images along with tf.image.decode_jpeg.
+    # But that would have the problem that we need to analyze the full image, not just the face.
+    # By cropping, we only remain with the face.
     image = tf.image.resize_image_with_crop_or_pad(image, IMAGE_SIZE,
                                                    IMAGE_SIZE)
     image = tf.image.convert_image_dtype(image, tf.float32)
