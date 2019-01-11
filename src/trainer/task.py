@@ -11,11 +11,8 @@ import matplotlib
 
 matplotlib.use('agg')
 
-import matplotlib.pyplot as plt
-
 import numpy as np
 import os
-from skimage.transform import resize
 
 import trainer.model as model
 
@@ -44,12 +41,12 @@ GEN_LEARNING_RATE = 1e-6
 DISC_LEARNING_RATE = 1e-6
 
 LAMBDA_REC = 1.0
-LAMBDA_ADV_LOCAL = 0.01  # 0.01
-LAMBDA_ADV_GLOBAL = 0.001  # 0.001
-LAMBDA_ID = 0.001  # 0.001
+LAMBDA_ADV_LOCAL = 0.0  # 0.01
+LAMBDA_ADV_GLOBAL = 0.0 # 0.001
+LAMBDA_ID = 0.0  # 0.001
 
-LAMBDA_LOCAL_DISC = 0.1  # 0.1
-LAMBDA_GLOBAL_DISC = 0.1  # 0.1
+LAMBDA_LOCAL_DISC = 0.0  # 0.1
+LAMBDA_GLOBAL_DISC = 0.0  # 0.1
 
 
 def get_reference_image_path_fn(train_reference_paths_dict):
@@ -333,6 +330,8 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
   # all new operations will be in test mode from now on
   tf.keras.backend.set_learning_phase(0)
 
+  # TODO check if the global step is incremented on eval
+  # Since we don't have optimizers here, maybe we need to increment it manually.
   global_step = tf.train.get_or_create_global_step()
 
   dataset = dataset.repeat()
