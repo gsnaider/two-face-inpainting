@@ -1,7 +1,10 @@
 #!/bin/bash
 
-EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/checkpoints"
-rm -rf $EXPERIMENT_DIR/*
+#EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/checkpoints"
+#rm -rf $EXPERIMENT_DIR/*
+
+EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_test"
+
 
 DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data/train_data"
 # DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data/train_data/data.zip"

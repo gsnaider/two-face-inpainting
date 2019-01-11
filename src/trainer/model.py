@@ -9,6 +9,7 @@ PATCH_SIZE = 32
 # In tf <= 1.10, min input size for vgg is 48x48
 EXPANDED_PATCH_SIZE = 48
 
+
 # TODO change the model from functional API to Model subclassing
 
 class ChannelWiseFCLayer(tf.keras.layers.Layer):
@@ -83,13 +84,17 @@ def make_generator_model(train=False):
   with tf.name_scope('Gen_Reference_Enconder'):
     reference_encoder = make_generator_encoder(train)
 
+  # We need to include an initial tensor in the Input layer so that we don't get
+  # an empty placeholder when running the batch normalization update ops.
+  # TODO after changing to the Model subclassing, the Input layer (and thus the
+  # input tensor) wouldn't be necessary.
   masked_image = tf.keras.Input(shape=(128, 128, 3,), name='masked_image',
-                                tensor=tf.ones([1, 128, 128, 3]))
+                                tensor=tf.zeros([1, 128, 128, 3]))
   masked_encoding = mask_encoder(masked_image)
   # 8x8x512
 
   reference_image = tf.keras.Input(shape=(128, 128, 3,), name='reference_image',
-                                   tensor=tf.ones([1, 128, 128, 3]))
+                                   tensor=tf.zeros([1, 128, 128, 3]))
   reference_encoding = reference_encoder(reference_image)
   # 8x8x512
 
@@ -160,7 +165,7 @@ def make_generator_model(train=False):
 def make_local_discriminator_model(train):
   patch = tf.keras.Input(shape=(EXPANDED_PATCH_SIZE, EXPANDED_PATCH_SIZE, 3,),
                          name='patch',
-                         tensor=tf.ones(
+                         tensor=tf.zeros(
                            [1, EXPANDED_PATCH_SIZE, EXPANDED_PATCH_SIZE, 3]))
 
   with tf.name_scope("VGG16"):
@@ -211,7 +216,7 @@ def make_local_discriminator_model(train):
 
 def make_global_discriminator_model(train):
   image = tf.keras.Input(shape=(128, 128, 3,), name='image',
-                         tensor=tf.ones([1, 128, 128, 3]))
+                         tensor=tf.zeros([1, 128, 128, 3]))
 
   with tf.name_scope("VGG16"):
     vgg16 = tf.keras.applications.vgg16.VGG16(include_top=False,

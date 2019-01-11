@@ -172,7 +172,6 @@ def expand_patches(patches):
 
 def train(dataset, generator, local_discriminator, global_discriminator,
           facenet, experiment_dir):
-  # TODO This didn't fixed BN. See if we can use it.
   # all new operations will be in train mode from now on
   tf.keras.backend.set_learning_phase(1)
 
@@ -220,16 +219,6 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                                   LAMBDA_ID, facenet)
 
   # This is required for the batch_normalization layers.
-  # https://github.com/tensorflow/tensorflow/issues/16455
-
-  # update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-
-  # gen_update_ops = generator.get_updates_for(generator.inputs)
-  # local_disc_update_ops = local_discriminator.get_updates_for(
-  #   local_discriminator.inputs)
-  # global_disc_update_ops = global_discriminator.get_updates_for(
-  #   global_discriminator.inputs)
-
   gen_update_ops = generator.updates
   local_disc_update_ops = local_discriminator.updates
   global_disc_update_ops = global_discriminator.updates
@@ -247,31 +236,50 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   tf.logging.debug(
     "global_disc_update_ops: {}".format(global_disc_update_ops))
 
-  with tf.control_dependencies(gen_update_ops):
+  update_ops = gen_update_ops + local_disc_update_ops + global_disc_update_ops
+
+  tf.logging.debug(
+    "num_update_ops: {}".format(len(update_ops)))
+  tf.logging.debug(
+    "update_ops: {}".format(update_ops))
+
+  with tf.control_dependencies(update_ops):
     # TODO check that this is the correct way to use optimizer with keras.
     gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
       gen_loss, var_list=generator.variables,
       global_step=global_step)
 
     # TODO check that this works
-    # tf.logging.info('Generator variables {}'.format([v.name for v in generator.variables]))
+    # tf.logging.debug('Generator variables {}'.format([v.name for v in generator.variables]))
 
-  with tf.control_dependencies(local_disc_update_ops):
     # TODO Seems that the disc optimizer is propagating changes to the generator.
     local_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
       local_disc_loss, var_list=local_discriminator.variables,
       global_step=global_step)
-    # tf.logging.info('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
+    # tf.logging.debug('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
 
-  with tf.control_dependencies(global_disc_update_ops):
     global_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
       global_disc_loss, var_list=global_discriminator.variables,
       global_step=global_step)
-    # tf.logging.info('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
+    # tf.logging.debug('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
 
   optimizers = tf.group(
     [gen_optimizer, local_disc_optimizer, global_disc_optimizer])
 
+  gen_bn_layers = [generator.layers[10], generator.layers[13]]
+  local_disc_bn_layers = [local_discriminator.layers[3],
+                          local_discriminator.layers[6]]
+  global_disc_bn_layers = [global_discriminator.layers[3],
+                           global_discriminator.layers[6],
+                           global_discriminator.layers[10]]
+
+  tf.logging.debug("GENERATOR BN LAYERS {}".format(gen_bn_layers))
+  tf.logging.debug("LOCAL_DISC BN LAYERS {}".format(local_disc_bn_layers))
+  tf.logging.debug("GLOBAL_DISC BN LAYERS {}".format(global_disc_bn_layers))
+
+  tf.logging.debug("PRINTING BN WEIGHTS")
+  for bn_layer in (gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
+    tf.logging.debug("Weights: {}".format(bn_layer.weights))
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
@@ -282,8 +290,41 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   hooks = [tf.train.StopAtStepHook(num_steps=MAX_STEPS)]
   with tf.train.MonitoredTrainingSession(
           checkpoint_dir=os.path.join(experiment_dir, "train"),
+          # TODO testing, remove the save_checkpoints_secs
+          save_checkpoint_secs=60,
           hooks=hooks) as sess:
     while not sess.should_stop():
+      tf.logging.debug(
+        "GEN_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            gen_bn_layers[0].weights)))
+      tf.logging.debug(
+        "GEN_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            gen_bn_layers[1].weights)))
+
+      tf.logging.debug(
+        "LOCAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            local_disc_bn_layers[0].weights)))
+      tf.logging.debug(
+        "LOCAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            local_disc_bn_layers[1].weights)))
+
+      tf.logging.debug(
+        "GLOBAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            global_disc_bn_layers[0].weights)))
+      tf.logging.debug(
+        "GLOBAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            global_disc_bn_layers[1].weights)))
+      tf.logging.debug(
+        "GLOBAL_DISC_BN_3: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            global_disc_bn_layers[2].weights)))
+
       train_step(sess, optimizers, gen_loss, local_disc_loss,
                  global_disc_loss,
                  global_step)
@@ -291,7 +332,6 @@ def train(dataset, generator, local_discriminator, global_discriminator,
 
 def evaluate(dataset, generator, local_discriminator, global_discriminator,
              facenet, experiment_dir):
-  # TODO This didn't fixed BN. See if we can use it.
   # all new operations will be in test mode from now on
   tf.keras.backend.set_learning_phase(0)
 
@@ -349,6 +389,22 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
       len(global_discriminator.get_updates_for(
         global_discriminator.inputs))))
 
+  gen_bn_layers = [generator.layers[10], generator.layers[13]]
+  local_disc_bn_layers = [local_discriminator.layers[3],
+                          local_discriminator.layers[6]]
+  global_disc_bn_layers = [global_discriminator.layers[3],
+                           global_discriminator.layers[6],
+                           global_discriminator.layers[10]]
+
+  tf.logging.debug("GENERATOR BN LAYERS {}".format(gen_bn_layers))
+  tf.logging.debug("LOCAL_DISC BN LAYERS {}".format(local_disc_bn_layers))
+  tf.logging.debug("GLOBAL_DISC BN LAYERS {}".format(global_disc_bn_layers))
+
+  tf.logging.debug("PRINTING BN WEIGHTS")
+  for bn_layer in (
+          gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
+    tf.logging.debug("Weights: {}".format(bn_layer.weights))
+
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
   tf.summary.scalar('global_disc_loss', global_disc_loss)
@@ -370,6 +426,38 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
     with tf.train.SingularMonitoredSession(
             checkpoint_dir=os.path.join(experiment_dir, "train")) as sess:
       tf.logging.info("Starting evaluation.")
+
+      tf.logging.debug(
+        "GEN_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            gen_bn_layers[0].weights)))
+      tf.logging.debug(
+        "GEN_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            gen_bn_layers[1].weights)))
+
+      tf.logging.debug(
+        "LOCAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            local_disc_bn_layers[0].weights)))
+      tf.logging.debug(
+        "LOCAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            local_disc_bn_layers[1].weights)))
+
+      tf.logging.debug(
+        "GLOBAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            global_disc_bn_layers[0].weights)))
+      tf.logging.debug(
+        "GLOBAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            global_disc_bn_layers[1].weights)))
+      tf.logging.debug(
+        "GLOBAL_DISC_BN_3: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+          *sess.run(
+            global_disc_bn_layers[2].weights)))
+
       gen_loss_value, local_disc_loss_value, global_disc_loss_value, global_step_value = sess.run(
         [gen_loss, local_disc_loss, global_disc_loss, global_step])
       tf.logging.info(
@@ -468,11 +556,8 @@ def main(args):
     assert args.run_mode == SAVE_MODEL_RUN_MODE
     tf.logging.info("Creating model for inference")
 
-  # TODO testing, switch back to train
   generator, local_discriminator, global_discriminator, facenet = model.make_models(
     args.facenet_dir, train=(args.run_mode == TRAIN_RUN_MODE))
-  # generator, local_discriminator, global_discriminator, facenet = model.make_models(
-  #   args.facenet_dir, train=True)
 
   if args.run_mode == SAVE_MODEL_RUN_MODE:
     save_model(generator, args.experiment_dir, args.model_number)

@@ -1,7 +1,9 @@
 #!/bin/bash
 
-EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/checkpoints"
-rm -rf $EXPERIMENT_DIR/*
+#EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/checkpoints"
+#rm -rf $EXPERIMENT_DIR/*
+
+EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_test"
 
 #BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 #EXPERIMENT_NAME="casia_vgg_rec_only_v4_5_2"
