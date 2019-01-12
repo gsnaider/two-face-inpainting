@@ -639,9 +639,6 @@ if __name__ == "__main__":
   parser.add_argument(
     '--facenet_dir',
     help='Directory where the weights and model of Facenet are stored.')
-  parser.add_argument('--batch_normalization', dest='batch_normalization', action='store_true')
-  parser.add_argument('--no_batch_normalization', dest='batch_normalization', action='store_false')
-  parser.set_defaults(batch_normalization=False)
   parser.add_argument(
     '--run_mode',
     choices=[TRAIN_RUN_MODE, EVAL_RUN_MODE, SAVE_MODEL_RUN_MODE],
@@ -656,11 +653,18 @@ if __name__ == "__main__":
     choices=['DEBUG', 'ERROR', 'FATAL', 'INFO', 'WARN'],
     default='INFO')
 
+  parser.add_argument('--batch_normalization', dest='batch_normalization', action='store_true')
+  parser.add_argument('--no_batch_normalization', dest='batch_normalization', action='store_false')
+  parser.set_defaults(batch_normalization=False)
+
   parser.add_argument(
     '--config_train_file',
     type=argparse.FileType(mode='r'))
   parser.add_argument('--batch_size', type=int, default=16)
-  parser.add_argument('--max_steps', type=int, default=1e3)
+
+  # float so we can express with scientific notation.
+  parser.add_argument('--max_steps', type=float, default=1e3)
+
   parser.add_argument('--gen_learning_rate', type=float, default=0.0)
   parser.add_argument('--disc_learning_rate', type=float, default=0.0)
   parser.add_argument('--lambda_rec', type=float, default=1.0)
@@ -690,5 +694,7 @@ if __name__ == "__main__":
 
   tf.logging.info('Dataset: {} - checkpoints: {}'.format(args.dataset_path,
                                                          args.experiment_dir))
+
+  tf.logging.debug("Args: {}".format(args))
 
   main(args)
