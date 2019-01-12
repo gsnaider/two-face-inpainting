@@ -1,3 +1,4 @@
+import json
 import time
 
 import tensorflow as tf
@@ -33,21 +34,6 @@ PATCH_SIZE = 32
 PATH_FILE_BUFFER_SIZE = 1000000
 SHUFFLE_BUFFER_SIZE = 1000
 PARALLEL_MAP_THREADS = 16
-
-# TODO pasar por parametros
-MAX_STEPS = 1e6
-
-GEN_LEARNING_RATE = 1e-5
-DISC_LEARNING_RATE = 1e-5
-
-LAMBDA_REC = 1.0 # 1.0
-LAMBDA_ADV_LOCAL = 0.0  # 0.01
-LAMBDA_ADV_GLOBAL = 0.0 # 0.001
-LAMBDA_ID = 0.0  # 0.001
-
-LAMBDA_LOCAL_DISC = 0.0  # 0.1
-LAMBDA_GLOBAL_DISC = 0.0  # 0.1
-
 
 def get_reference_image_path_fn(train_reference_paths_dict):
   def get_reference_image_path(image_path):
@@ -168,7 +154,7 @@ def expand_patches(patches):
 
 
 def train(dataset, generator, local_discriminator, global_discriminator,
-          facenet, experiment_dir):
+          facenet, args):
   # all new operations will be in train mode from now on
   tf.keras.backend.set_learning_phase(1)
 
@@ -198,7 +184,7 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                                                training=True)
   local_disc_loss = model.discriminator_loss(local_real_output,
                                              local_generated_output,
-                                             LAMBDA_LOCAL_DISC)
+                                             args.lambda_local_disc)
 
   # Global discriminator
   global_real_output = global_discriminator(full_images, training=True)
@@ -206,14 +192,14 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                                                  training=True)
   global_disc_loss = model.discriminator_loss(global_real_output,
                                               global_generated_output,
-                                              LAMBDA_GLOBAL_DISC)
+                                              args.lambda_global_disc)
 
   # Generator
   gen_loss = model.generator_loss(unmasked_images, generated_images,
                                   reference_images, local_generated_output,
-                                  global_generated_output, LAMBDA_REC,
-                                  LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL,
-                                  LAMBDA_ID, facenet)
+                                  global_generated_output, args.lambda_rec,
+                                  args.lambda_adv_local, args.lambda_adv_global,
+                                  args.lambda_id, facenet)
 
   # This is required for the batch_normalization layers.
   gen_update_ops = generator.updates
@@ -242,18 +228,18 @@ def train(dataset, generator, local_discriminator, global_discriminator,
 
   with tf.control_dependencies(update_ops):
     # TODO check that this is the correct way to use optimizer with keras.
-    gen_optimizer = tf.train.AdamOptimizer(GEN_LEARNING_RATE).minimize(
+    gen_optimizer = tf.train.AdamOptimizer(args.gen_learning_rate).minimize(
       gen_loss, var_list=generator.variables,
       global_step=global_step)
     tf.logging.debug('Generator variables {}'.format([v.name for v in generator.variables]))
 
     # TODO Seems that the disc optimizer is propagating changes to the generator.
-    local_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+    local_disc_optimizer = tf.train.AdamOptimizer(args.disc_learning_rate).minimize(
       local_disc_loss, var_list=local_discriminator.variables,
       global_step=global_step)
     tf.logging.debug('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
 
-    global_disc_optimizer = tf.train.AdamOptimizer(DISC_LEARNING_RATE).minimize(
+    global_disc_optimizer = tf.train.AdamOptimizer(args.disc_learning_rate).minimize(
       global_disc_loss, var_list=global_discriminator.variables,
       global_step=global_step)
     tf.logging.debug('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
@@ -285,9 +271,9 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   tf.summary.image('original_train_image', unmasked_images, max_outputs=8)
   tf.summary.image('reference_train_images', reference_images, max_outputs=8)
 
-  hooks = [tf.train.StopAtStepHook(num_steps=MAX_STEPS)]
+  hooks = [tf.train.StopAtStepHook(num_steps=args.max_steps)]
   with tf.train.MonitoredTrainingSession(
-          checkpoint_dir=os.path.join(experiment_dir, "train"),
+          checkpoint_dir=os.path.join(args.experiment_dir, "train"),
           hooks=hooks) as sess:
     while not sess.should_stop():
 
@@ -329,7 +315,7 @@ def train(dataset, generator, local_discriminator, global_discriminator,
 
 
 def evaluate(dataset, generator, local_discriminator, global_discriminator,
-             facenet, experiment_dir):
+             facenet, args):
   # all new operations will be in test mode from now on
   tf.keras.backend.set_learning_phase(0)
 
@@ -361,7 +347,7 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
                                                training=False)
   local_disc_loss = model.discriminator_loss(local_real_output,
                                              local_generated_output,
-                                             LAMBDA_LOCAL_DISC)
+                                             args.lambda_local_disc)
 
   # Global discriminator
   global_real_output = global_discriminator(full_images, training=False)
@@ -369,14 +355,14 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
                                                  training=False)
   global_disc_loss = model.discriminator_loss(global_real_output,
                                               global_generated_output,
-                                              LAMBDA_GLOBAL_DISC)
+                                              args.lambda_global_disc)
 
   # Generator
   gen_loss = model.generator_loss(unmasked_images, generated_images,
                                   reference_images, local_generated_output,
-                                  global_generated_output, LAMBDA_REC,
-                                  LAMBDA_ADV_LOCAL, LAMBDA_ADV_GLOBAL,
-                                  LAMBDA_ID, facenet)
+                                  global_generated_output, args.lambda_rec,
+                                  args.lambda_adv_local, args.lambda_adv_global,
+                                  args.lambda_id, facenet)
 
   tf.logging.debug("num_gen_update_ops: {}".format(
     len(generator.get_updates_for(generator.inputs))))
@@ -424,10 +410,10 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
   # Have to do this because for some reason the checkpoints are not being updated.
   # TODO see if this could be done better.
   with tf.train.SingularMonitoredSession(
-          checkpoint_dir=os.path.join(experiment_dir, "train")) as sess:
+          checkpoint_dir=os.path.join(args.experiment_dir, "train")) as sess:
     tf.logging.info("Starting evaluation.")
 
-    writer = tf.summary.FileWriter(os.path.join(experiment_dir, "eval"), sess.graph)
+    writer = tf.summary.FileWriter(os.path.join(args.experiment_dir, "eval"), sess.graph)
 
     while True:
       tf.logging.debug(
@@ -571,10 +557,10 @@ def main(args):
   # reason, probably because Batch Normalization.
   # TODO try removing Batch Normalization and see if this is solved.
   # TODO maybe switch to Dropout
-  generator, local_discriminator, global_discriminator, facenet = model.make_models(
-    args.facenet_dir, train=True)
   # generator, local_discriminator, global_discriminator, facenet = model.make_models(
-  #   args.facenet_dir, train=(args.run_mode == TRAIN_RUN_MODE))
+  #   args.facenet_dir, train=True)
+  generator, local_discriminator, global_discriminator, facenet = model.make_models(
+    args.facenet_dir, train=(args.run_mode == TRAIN_RUN_MODE), use_batch_norm=args.batch_normalization)
 
   if args.run_mode == SAVE_MODEL_RUN_MODE:
     save_model(generator, args.experiment_dir, args.model_number)
@@ -644,11 +630,11 @@ def main(args):
 
     if args.run_mode == TRAIN_RUN_MODE:
       train(full_dataset, generator, local_discriminator, global_discriminator,
-            facenet, args.experiment_dir)
+            facenet, args)
     elif args.run_mode == EVAL_RUN_MODE:
       evaluate(full_dataset, generator, local_discriminator,
                global_discriminator,
-               facenet, args.experiment_dir)
+               facenet, args)
 
 
 if __name__ == "__main__":
@@ -664,11 +650,9 @@ if __name__ == "__main__":
   parser.add_argument(
     '--facenet_dir',
     help='Directory where the weights and model of Facenet are stored.')
-  parser.add_argument(
-    '--batch_size',
-    type=int,
-    help='Batch size for training.',
-    default=16)
+  parser.add_argument('--batch_normalization', dest='batch_normalization', action='store_true')
+  parser.add_argument('--no_batch_normalization', dest='batch_normalization', action='store_false')
+  parser.set_defaults(batch_normalization=False)
   parser.add_argument(
     '--run_mode',
     choices=[TRAIN_RUN_MODE, EVAL_RUN_MODE, SAVE_MODEL_RUN_MODE],
@@ -683,7 +667,32 @@ if __name__ == "__main__":
     choices=['DEBUG', 'ERROR', 'FATAL', 'INFO', 'WARN'],
     default='INFO')
 
+  parser.add_argument(
+    '--config-train-file',
+    dest='config_train_file',
+    type=argparse.FileType(mode='r'))
+  parser.add_argument('--batch_size', type=int, default=16)
+  parser.add_argument('--max_steps', type=int, default=1e3)
+  parser.add_argument('--gen_learning_rate', type=float, default=0.0)
+  parser.add_argument('--disc_learning_rate', type=float, default=0.0)
+  parser.add_argument('--lambda_rec', type=float, default=1.0)
+  parser.add_argument('--lambda_adv_local', type=float, default=0.01)
+  parser.add_argument('--lambda_adv_global', type=float, default=0.001)
+  parser.add_argument('--lambda_id', type=float, default=0.001)
+  parser.add_argument('--lambda_local_disc', type=float, default=0.1)
+  parser.add_argument('--lambda_global_disc', type=float, default=0.1)
+
   args, _ = parser.parse_known_args()
+
+  if args.config_train_file:
+    data = json.load(args.config_file)
+    delattr(args, 'config_train_file')
+    arg_dict = args.__dict__
+    for key, value in data.items():
+      if isinstance(value, list):
+        arg_dict[key].extend(value)
+      else:
+        arg_dict[key] = value
 
   # Set python level verbosity
   tf.logging.set_verbosity(args.verbosity)

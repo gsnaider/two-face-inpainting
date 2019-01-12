@@ -1,0 +1,16 @@
+{
+  "batch_size": 16,
+
+  "max_steps": 1e3,
+
+  "gen_learning_rate": 3e-5,
+  "disc_learning_rate": 3e-5,
+
+  "lambda_rec": 1.0,
+  "lambda_adv_local": 0.0,
+  "lambda_adv_global": 0.0,
+  "lambda_id": 0.0,
+
+  "lambda_local_disc": 0.0,
+  "lambda_global_disc": 0.0
+}
