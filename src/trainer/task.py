@@ -570,6 +570,7 @@ def main(args):
   # Have to use train=True, otherwise the images generated are saturated for some
   # reason, probably because Batch Normalization.
   # TODO try removing Batch Normalization and see if this is solved.
+  # TODO maybe switch to Dropout
   generator, local_discriminator, global_discriminator, facenet = model.make_models(
     args.facenet_dir, train=True)
   # generator, local_discriminator, global_discriminator, facenet = model.make_models(
