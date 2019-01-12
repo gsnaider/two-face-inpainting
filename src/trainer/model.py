@@ -34,7 +34,7 @@ class ChannelWiseFCLayer(tf.keras.layers.Layer):
     return output_reshape
 
 
-def make_generator_encoder(train):
+def make_generator_encoder(train, use_batch_norm=False):
   with tf.name_scope("VGG16"):
     vgg16 = tf.keras.applications.vgg16.VGG16(include_top=False,
                                               weights='imagenet',
@@ -56,17 +56,20 @@ def make_generator_encoder(train):
                                          strides=(1, 1),
                                          padding='same')(
       input_encoder.layers[-1].output)
-
     # 16x16x512
-    gen_encoder = tf.keras.layers.BatchNormalization()(gen_encoder,
-                                                       training=train)
+
+    if (use_batch_norm):
+      gen_encoder = tf.keras.layers.BatchNormalization()(gen_encoder,
+                                                         training=train)
     gen_encoder = tf.keras.layers.LeakyReLU()(gen_encoder)
 
     gen_encoder = tf.keras.layers.Conv2D(512, (3, 3),
                                          strides=(1, 1),
                                          padding='same')(gen_encoder)
-    gen_encoder = tf.keras.layers.BatchNormalization()(gen_encoder,
-                                                       training=train)
+
+    if (use_batch_norm):
+      gen_encoder = tf.keras.layers.BatchNormalization()(gen_encoder,
+                                                         training=train)
     gen_encoder = tf.keras.layers.LeakyReLU()(gen_encoder)
     # 16x16x512
 
@@ -77,12 +80,12 @@ def make_generator_encoder(train):
   return tf.keras.Model(inputs=input_encoder.inputs, outputs=gen_encoder)
 
 
-def make_generator_model(train=False):
+def make_generator_model(train=False, use_batch_norm=False):
   with tf.name_scope('Gen_Masked_Enconder'):
-    mask_encoder = make_generator_encoder(train)
+    mask_encoder = make_generator_encoder(train, use_batch_norm)
 
   with tf.name_scope('Gen_Reference_Enconder'):
-    reference_encoder = make_generator_encoder(train)
+    reference_encoder = make_generator_encoder(train, use_batch_norm)
 
   # We need to include an initial tensor in the Input layer so that we don't get
   # an empty placeholder when running the batch normalization update ops.
@@ -133,7 +136,8 @@ def make_generator_model(train=False):
                                                use_bias=False,
                                                input_shape=(16, 16, 256))(
       encoding)
-    encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
+    if (use_batch_norm):
+      encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
     encoding = tf.keras.layers.LeakyReLU()(encoding)
     # 16x16x128
 
@@ -143,7 +147,8 @@ def make_generator_model(train=False):
                                                use_bias=False,
                                                input_shape=(16, 16, 128))(
       encoding)
-    encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
+    if (use_batch_norm):
+      encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
     encoding = tf.keras.layers.LeakyReLU()(encoding)
     # 16x16x64
 
@@ -162,7 +167,7 @@ def make_generator_model(train=False):
                         outputs=generated_patch)
 
 
-def make_local_discriminator_model(train):
+def make_local_discriminator_model(train, use_batch_norm=False):
   patch = tf.keras.Input(shape=(EXPANDED_PATCH_SIZE, EXPANDED_PATCH_SIZE, 3,),
                          name='patch',
                          tensor=tf.zeros(
@@ -187,7 +192,8 @@ def make_local_discriminator_model(train):
                                       strides=(1, 1),
                                       padding='same',
                                       input_shape=(6, 6, 256))(encoding)
-    encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
+    if (use_batch_norm):
+      encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
     encoding = tf.keras.layers.LeakyReLU()(encoding)
     # 6x6x128
 
@@ -195,7 +201,8 @@ def make_local_discriminator_model(train):
                                       strides=(1, 1),
                                       padding='same',
                                       input_shape=(4, 4, 128))(encoding)
-    encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
+    if (use_batch_norm):
+      encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
     encoding = tf.keras.layers.LeakyReLU()(encoding)
     # 6x6x64
 
@@ -214,7 +221,7 @@ def make_local_discriminator_model(train):
   return tf.keras.Model(inputs=patch, outputs=logits)
 
 
-def make_global_discriminator_model(train):
+def make_global_discriminator_model(train, use_batch_norm=False):
   image = tf.keras.Input(shape=(128, 128, 3,), name='image',
                          tensor=tf.zeros([1, 128, 128, 3]))
 
@@ -240,14 +247,16 @@ def make_global_discriminator_model(train):
                                           strides=(1, 1),
                                           padding='same')(disc_encoder)
     # 16x16x256
-    disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder,
+    if (use_batch_norm):
+      disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder,
                                                         training=train)
     disc_encoder = tf.keras.layers.LeakyReLU()(disc_encoder)
 
     disc_encoder = tf.keras.layers.Conv2D(128, (3, 3),
                                           strides=(1, 1),
                                           padding='same')(disc_encoder)
-    disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder,
+    if (use_batch_norm):
+      disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder,
                                                         training=train)
     disc_encoder = tf.keras.layers.LeakyReLU()(disc_encoder)
     # 16x16x128
@@ -259,7 +268,8 @@ def make_global_discriminator_model(train):
     disc_encoder = tf.keras.layers.Conv2D(64, (3, 3),
                                           strides=(1, 1),
                                           padding='same')(disc_encoder)
-    disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder,
+    if (use_batch_norm):
+      disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder,
                                                         training=train)
     disc_encoder = tf.keras.layers.LeakyReLU()(disc_encoder)
     # 8x8x64
@@ -352,15 +362,19 @@ def discriminator_loss(real_output, generated_output, lambda_adv):
   return lambda_adv * total_loss
 
 
-def make_models(facenet_dir, train=False):
+def make_models(facenet_dir, train=False, use_batch_norm=False):
+  tf.logging.info(
+    "Creating models with train={} and batch_norm={} flags".format(train,
+                                                                   use_batch_norm))
+
   with tf.name_scope('Generator'):
-    generator = make_generator_model(train)
+    generator = make_generator_model(train, use_batch_norm)
 
   with tf.name_scope('Local_Discriminator'):
-    local_discriminator = make_local_discriminator_model(train)
+    local_discriminator = make_local_discriminator_model(train, use_batch_norm)
 
   with tf.name_scope('Global_Discriminator'):
-    global_discriminator = make_global_discriminator_model(train)
+    global_discriminator = make_global_discriminator_model(train, use_batch_norm)
 
   with tf.name_scope('Facenet'):
     facenet = make_identity_model(facenet_dir)
@@ -374,7 +388,7 @@ def make_models(facenet_dir, train=False):
   tf.logging.info('Global Discriminator')
   global_discriminator.summary()
 
-  tf.logging.info('Facenet')
-  facenet.summary()
+  # tf.logging.info('Facenet')
+  # facenet.summary()
 
   return generator, local_discriminator, global_discriminator, facenet
