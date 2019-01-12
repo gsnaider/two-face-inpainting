@@ -6,10 +6,6 @@ import tempfile
 IMAGE_SIZE = 128
 PATCH_SIZE = 32
 
-# In tf <= 1.10, min input size for vgg is 48x48
-EXPANDED_PATCH_SIZE = 48
-
-
 # TODO change the model from functional API to Model subclassing
 
 class ChannelWiseFCLayer(tf.keras.layers.Layer):
@@ -168,25 +164,25 @@ def make_generator_model(train=False, use_batch_norm=False):
 
 
 def make_local_discriminator_model(train, use_batch_norm=False):
-  patch = tf.keras.Input(shape=(EXPANDED_PATCH_SIZE, EXPANDED_PATCH_SIZE, 3,),
+  patch = tf.keras.Input(shape=(PATCH_SIZE, PATCH_SIZE, 3,),
                          name='patch',
                          tensor=tf.zeros(
-                           [1, EXPANDED_PATCH_SIZE, EXPANDED_PATCH_SIZE, 3]))
+                           [1, PATCH_SIZE, PATCH_SIZE, 3]))
 
   with tf.name_scope("VGG16"):
     vgg16 = tf.keras.applications.vgg16.VGG16(include_top=False,
                                               weights='imagenet',
                                               input_tensor=None,
                                               input_shape=(
-                                                EXPANDED_PATCH_SIZE,
-                                                EXPANDED_PATCH_SIZE, 3))
+                                                PATCH_SIZE,
+                                                PATCH_SIZE, 3))
     encoder = tf.keras.Model(inputs=vgg16.inputs,
                              outputs=vgg16.layers[10].output)
     encoder.trainable = False
 
   with tf.name_scope("Local_Disc_Encoder"):
     encoding = encoder(patch)
-    # 6x6x256
+    # 4x4x256
 
     encoding = tf.keras.layers.Conv2D(128, (3, 3),
                                       strides=(1, 1),
@@ -195,7 +191,7 @@ def make_local_discriminator_model(train, use_batch_norm=False):
     if (use_batch_norm):
       encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
     encoding = tf.keras.layers.LeakyReLU()(encoding)
-    # 6x6x128
+    # 4x4x128
 
     encoding = tf.keras.layers.Conv2D(64, (3, 3),
                                       strides=(1, 1),
@@ -204,14 +200,14 @@ def make_local_discriminator_model(train, use_batch_norm=False):
     if (use_batch_norm):
       encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
     encoding = tf.keras.layers.LeakyReLU()(encoding)
-    # 6x6x64
+    # 4x4x64
 
     encoding = tf.keras.layers.MaxPool2D(pool_size=(2, 2), strides=(2, 2))(
       encoding)
-    # 3x3x64
+    # 2x2x64
 
     encoding = tf.keras.layers.Flatten()(encoding)
-    # 1024
+    # 1x256
 
   # Classifier
   with tf.name_scope("Local_Disc_Classifier"):

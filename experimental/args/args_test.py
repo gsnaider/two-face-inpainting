@@ -3,8 +3,7 @@ import json
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-  '--config-file',
-  dest='config_file',
+  '--config_file',
   type=argparse.FileType(mode='r'))
 
 parser.add_argument('--max_steps', type=int)

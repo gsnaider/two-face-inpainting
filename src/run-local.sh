@@ -21,4 +21,5 @@ gcloud ml-engine local train \
     --facenet_dir $FACENET_DIR \
     --batch_size 8 \
     --run_mode "TRAIN" \
-    --verbosity "INFO"
+    --verbosity "INFO" \
+    --config_train_file config-train.json

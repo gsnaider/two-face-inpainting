@@ -21,7 +21,7 @@ gcloud ml-engine jobs submit training $JOB_NAME \
     --package-path trainer/ \
     --region $REGION \
     --scale-tier BASIC_GPU \
-    --runtime-version 1.10 \
+    --runtime-version 1.12 \
     --python-version 3.5 \
     -- \
     --dataset_path $DATASET_PATH \

@@ -148,11 +148,6 @@ def train_step(sess, optimizers, gen_loss, local_disc_loss,
         global_disc_loss_value))
 
 
-def expand_patches(patches):
-  paddings = tf.constant([[0, 0], [8, 8], [8, 8], [0, 0]])
-  return tf.pad(patches, paddings, "CONSTANT")
-
-
 def train(dataset, generator, local_discriminator, global_discriminator,
           facenet, args):
   # all new operations will be in train mode from now on
@@ -173,14 +168,9 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   generated_images = patch_image(generated_patches, masked_images)
 
   # Local discriminator
-
-  # Expand patches to because in tf <= 1.10 VGG min input size is 48x48
-  expanded_real_patches = expand_patches(extract_patch(full_images))
-  expanded_gen_patches = expand_patches(generated_patches)
-
-  local_real_output = local_discriminator(expanded_real_patches,
+  local_real_output = local_discriminator(extract_patch(full_images),
                                           training=True)
-  local_generated_output = local_discriminator(expanded_gen_patches,
+  local_generated_output = local_discriminator(generated_patches,
                                                training=True)
   local_disc_loss = model.discriminator_loss(local_real_output,
                                              local_generated_output,
@@ -247,20 +237,21 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   optimizers = tf.group(
     [gen_optimizer, local_disc_optimizer, global_disc_optimizer])
 
-  gen_bn_layers = [generator.layers[10], generator.layers[13]]
-  local_disc_bn_layers = [local_discriminator.layers[3],
-                          local_discriminator.layers[6]]
-  global_disc_bn_layers = [global_discriminator.layers[3],
-                           global_discriminator.layers[6],
-                           global_discriminator.layers[10]]
+  if (args.batch_normalization):
+    gen_bn_layers = [generator.layers[10], generator.layers[13]]
+    local_disc_bn_layers = [local_discriminator.layers[3],
+                            local_discriminator.layers[6]]
+    global_disc_bn_layers = [global_discriminator.layers[3],
+                             global_discriminator.layers[6],
+                             global_discriminator.layers[10]]
 
-  tf.logging.debug("GENERATOR BN LAYERS {}".format(gen_bn_layers))
-  tf.logging.debug("LOCAL_DISC BN LAYERS {}".format(local_disc_bn_layers))
-  tf.logging.debug("GLOBAL_DISC BN LAYERS {}".format(global_disc_bn_layers))
+    tf.logging.debug("GENERATOR BN LAYERS {}".format(gen_bn_layers))
+    tf.logging.debug("LOCAL_DISC BN LAYERS {}".format(local_disc_bn_layers))
+    tf.logging.debug("GLOBAL_DISC BN LAYERS {}".format(global_disc_bn_layers))
 
-  tf.logging.debug("PRINTING BN WEIGHTS")
-  for bn_layer in (gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
-    tf.logging.debug("Weights: {}".format(bn_layer.weights))
+    tf.logging.debug("PRINTING BN WEIGHTS")
+    for bn_layer in (gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
+      tf.logging.debug("Weights: {}".format(bn_layer.weights))
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
@@ -277,37 +268,38 @@ def train(dataset, generator, local_discriminator, global_discriminator,
           hooks=hooks) as sess:
     while not sess.should_stop():
 
-      # TODO remove these (and all other related debug logs) after verifying BN works correctly.
-      tf.logging.debug(
-        "GEN_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            gen_bn_layers[0].weights)))
-      tf.logging.debug(
-        "GEN_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            gen_bn_layers[1].weights)))
+      if (args.batch_normalization):
+        # TODO remove these (and all other related debug logs) after verifying BN works correctly.
+        tf.logging.debug(
+          "GEN_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              gen_bn_layers[0].weights)))
+        tf.logging.debug(
+          "GEN_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              gen_bn_layers[1].weights)))
 
-      tf.logging.debug(
-        "LOCAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            local_disc_bn_layers[0].weights)))
-      tf.logging.debug(
-        "LOCAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            local_disc_bn_layers[1].weights)))
+        tf.logging.debug(
+          "LOCAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              local_disc_bn_layers[0].weights)))
+        tf.logging.debug(
+          "LOCAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              local_disc_bn_layers[1].weights)))
 
-      tf.logging.debug(
-        "GLOBAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            global_disc_bn_layers[0].weights)))
-      tf.logging.debug(
-        "GLOBAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            global_disc_bn_layers[1].weights)))
-      tf.logging.debug(
-        "GLOBAL_DISC_BN_3: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            global_disc_bn_layers[2].weights)))
+        tf.logging.debug(
+          "GLOBAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              global_disc_bn_layers[0].weights)))
+        tf.logging.debug(
+          "GLOBAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              global_disc_bn_layers[1].weights)))
+        tf.logging.debug(
+          "GLOBAL_DISC_BN_3: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              global_disc_bn_layers[2].weights)))
 
       train_step(sess, optimizers, gen_loss, local_disc_loss,
                  global_disc_loss,
@@ -336,14 +328,9 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
   generated_images = patch_image(generated_patches, masked_images)
 
   # Local discriminator
-
-  # Expand patches to because in tf <= 1.10 VGG min input size is 48x48
-  expanded_real_patches = expand_patches(extract_patch(full_images))
-  expanded_gen_patches = expand_patches(generated_patches)
-
-  local_real_output = local_discriminator(expanded_real_patches,
+  local_real_output = local_discriminator(extract_patch(full_images),
                                           training=False)
-  local_generated_output = local_discriminator(expanded_gen_patches,
+  local_generated_output = local_discriminator(generated_patches,
                                                training=False)
   local_disc_loss = model.discriminator_loss(local_real_output,
                                              local_generated_output,
@@ -375,21 +362,22 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
       len(global_discriminator.get_updates_for(
         global_discriminator.inputs))))
 
-  gen_bn_layers = [generator.layers[10], generator.layers[13]]
-  local_disc_bn_layers = [local_discriminator.layers[3],
-                          local_discriminator.layers[6]]
-  global_disc_bn_layers = [global_discriminator.layers[3],
-                           global_discriminator.layers[6],
-                           global_discriminator.layers[10]]
+  if (args.batch_normalization):
+    gen_bn_layers = [generator.layers[10], generator.layers[13]]
+    local_disc_bn_layers = [local_discriminator.layers[3],
+                            local_discriminator.layers[6]]
+    global_disc_bn_layers = [global_discriminator.layers[3],
+                             global_discriminator.layers[6],
+                             global_discriminator.layers[10]]
 
-  tf.logging.debug("GENERATOR BN LAYERS {}".format(gen_bn_layers))
-  tf.logging.debug("LOCAL_DISC BN LAYERS {}".format(local_disc_bn_layers))
-  tf.logging.debug("GLOBAL_DISC BN LAYERS {}".format(global_disc_bn_layers))
+    tf.logging.debug("GENERATOR BN LAYERS {}".format(gen_bn_layers))
+    tf.logging.debug("LOCAL_DISC BN LAYERS {}".format(local_disc_bn_layers))
+    tf.logging.debug("GLOBAL_DISC BN LAYERS {}".format(global_disc_bn_layers))
 
-  tf.logging.debug("PRINTING BN WEIGHTS")
-  for bn_layer in (
-          gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
-    tf.logging.debug("Weights: {}".format(bn_layer.weights))
+    tf.logging.debug("PRINTING BN WEIGHTS")
+    for bn_layer in (
+            gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
+      tf.logging.debug("Weights: {}".format(bn_layer.weights))
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
@@ -416,36 +404,37 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
     writer = tf.summary.FileWriter(os.path.join(args.experiment_dir, "eval"), sess.graph)
 
     while True:
-      tf.logging.debug(
-        "GEN_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            gen_bn_layers[0].weights)))
-      tf.logging.debug(
-        "GEN_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            gen_bn_layers[1].weights)))
+      if (args.batch_normalization):
+        tf.logging.debug(
+          "GEN_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              gen_bn_layers[0].weights)))
+        tf.logging.debug(
+          "GEN_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              gen_bn_layers[1].weights)))
 
-      tf.logging.debug(
-        "LOCAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            local_disc_bn_layers[0].weights)))
-      tf.logging.debug(
-        "LOCAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            local_disc_bn_layers[1].weights)))
+        tf.logging.debug(
+          "LOCAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              local_disc_bn_layers[0].weights)))
+        tf.logging.debug(
+          "LOCAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              local_disc_bn_layers[1].weights)))
 
-      tf.logging.debug(
-        "GLOBAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            global_disc_bn_layers[0].weights)))
-      tf.logging.debug(
-        "GLOBAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            global_disc_bn_layers[1].weights)))
-      tf.logging.debug(
-        "GLOBAL_DISC_BN_3: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-          *sess.run(
-            global_disc_bn_layers[2].weights)))
+        tf.logging.debug(
+          "GLOBAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              global_disc_bn_layers[0].weights)))
+        tf.logging.debug(
+          "GLOBAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              global_disc_bn_layers[1].weights)))
+        tf.logging.debug(
+          "GLOBAL_DISC_BN_3: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
+            *sess.run(
+              global_disc_bn_layers[2].weights)))
 
       gen_loss_value, local_disc_loss_value, global_disc_loss_value, global_step_value = sess.run(
         [gen_loss, local_disc_loss, global_disc_loss, global_step])
@@ -668,8 +657,7 @@ if __name__ == "__main__":
     default='INFO')
 
   parser.add_argument(
-    '--config-train-file',
-    dest='config_train_file',
+    '--config_train_file',
     type=argparse.FileType(mode='r'))
   parser.add_argument('--batch_size', type=int, default=16)
   parser.add_argument('--max_steps', type=int, default=1e3)
@@ -685,7 +673,7 @@ if __name__ == "__main__":
   args, _ = parser.parse_known_args()
 
   if args.config_train_file:
-    data = json.load(args.config_file)
+    data = json.load(args.config_train_file)
     delattr(args, 'config_train_file')
     arg_dict = args.__dict__
     for key, value in data.items():
