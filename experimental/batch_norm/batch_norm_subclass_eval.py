@@ -1,8 +1,10 @@
+import os
 import time
 
 import numpy as np
 import tensorflow as tf
 
+CHECKPOINT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_subclass"
 
 class MyModel(tf.keras.Model):
 
@@ -85,11 +87,11 @@ print("BN Weights {}".format(bn_weights))
 print("BN layer: {}".format(model.layers[0]))
 
 with tf.train.SingularMonitoredSession(
-        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_subclass/train") as sess:
+        checkpoint_dir=os.path.join(CHECKPOINT_DIR, "train")) as sess:
   tf.logging.info("Starting evaluation.")
 
   writer = tf.summary.FileWriter(
-    "/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_subclass/eval", sess.graph)
+    os.path.join(CHECKPOINT_DIR, "eval"), sess.graph)
 
   print("Gamma {} - Beta {} - Moving mean {} - Moving variance {}".format(
     *sess.run(

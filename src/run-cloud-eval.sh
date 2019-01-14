@@ -5,7 +5,7 @@ JOB_NAME="casia_vgg_$now"
 REGION="us-central1"
 
 BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
-EXPERIMENT_NAME="casia_vgg_rec_only_v4_5_3"
+EXPERIMENT_NAME="two_face_v6_rec_loss"
 EXPERIMENT_DIR="$BASE_DIR/$EXPERIMENT_NAME"
 
 # DATASET_PATH="gs://two-face-inpainting-mlengine/eval_data"
@@ -21,12 +21,20 @@ gcloud ml-engine jobs submit training $JOB_NAME \
     --package-path trainer/ \
     --region $REGION \
     --scale-tier BASIC \
-    --runtime-version 1.10 \
+    --runtime-version 1.12 \
     --python-version 3.5 \
     -- \
     --dataset_path $DATASET_PATH \
     --experiment_dir $EXPERIMENT_DIR \
     --facenet_dir $FACENET_DIR \
-    --batch_size 16 \
     --run_mode "EVAL" \
-    --verbosity "INFO"
+    --verbosity "INFO" \
+    \
+    --batch_normalization \
+    --batch_size 64 \
+    --lambda_rec 1.0 \
+    --lambda_adv_local 0.0 \
+    --lambda_adv_global 0.0 \
+    --lambda_id 0.0 \
+    --lambda_local_disc 0.0 \
+    --lambda_global_disc 0.0

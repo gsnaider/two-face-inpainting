@@ -1,6 +1,9 @@
+import os
+
 import numpy as np
 import tensorflow as tf
 
+CHECKPOINT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_func"
 
 def make_model(input_tensor):
   with tf.name_scope('my_model'):
@@ -10,7 +13,7 @@ def make_model(input_tensor):
 
     x = tf.keras.layers.Dense(5)(input)
     bn = tf.keras.layers.BatchNormalization()
-    x = bn(x)
+    x = bn(x, training=True)
     x = tf.keras.layers.ReLU()(x)
     y = tf.keras.layers.Dense(1)(x)
 
@@ -47,13 +50,13 @@ next_2 = iterator_2.get_next()
 
 # This works as long as the tensor is of the required shape,
 # it doesn't matter what specific value we use.
-# model = make_model(tf.zeros([1, 1], dtype=tf.float64, name="my_constant"))
-model = make_model(next_1[0])
+model = make_model(tf.zeros([1, 1], dtype=tf.float64, name="my_constant"))
+# model = make_model(next_1[0])
 
 # TODO ver si llamar dos veces al modelo (haciendo que se creen dos grafos con variables distintas)
 # afecta en algo al entrenamiento..
-predictions = model(next_1[0])
-predictions2 = model(next_2[0])
+predictions = model(next_1[0], training=True)
+predictions2 = model(next_2[0], training=True)
 
 loss_op1 = tf.nn.l2_loss(predictions - next_1[1])
 loss_op2 = tf.nn.l2_loss(predictions2 - next_2[1])
@@ -80,7 +83,7 @@ print("BN Weights {}".format(bn_weights))
 
 hooks = [tf.train.StopAtStepHook(num_steps=1000000)]
 with tf.train.MonitoredTrainingSession(
-        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_func/train",
+        checkpoint_dir=os.path.join(CHECKPOINT_DIR, "train"),
         save_checkpoint_steps=1000,
         hooks=hooks) as sess:
   print("Gamma {} - Beta {} - Moving mean {} - Moving variance {}".format(
