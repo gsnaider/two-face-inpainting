@@ -26,6 +26,7 @@ MASKED_DATASET_PATHS_FILE = "masked-files.txt"
 REFERENCE_DATASET_PATHS_FILE = "reference-files.txt"
 
 STEPS_PER_PRINT = 20
+
 EVAL_SAVE_SECS = 120
 
 IMAGE_SIZE = 128
@@ -150,9 +151,6 @@ def train_step(sess, optimizers, gen_loss, local_disc_loss,
 
 def train(dataset, generator, local_discriminator, global_discriminator,
           facenet, args):
-  # all new operations will be in train mode from now on
-  tf.keras.backend.set_learning_phase(1)
-
   global_step = tf.train.get_or_create_global_step()
 
   dataset = dataset.repeat()
@@ -308,9 +306,6 @@ def train(dataset, generator, local_discriminator, global_discriminator,
 
 def evaluate(dataset, generator, local_discriminator, global_discriminator,
              facenet, args):
-  # all new operations will be in test mode from now on
-  tf.keras.backend.set_learning_phase(0)
-
   # TODO verify that global step is updated every 10 minutes (when running train and eval in parallel).
   # This is because the summaries from the train run are saved every 10 minutes.
   global_step = tf.train.get_or_create_global_step()
@@ -535,8 +530,12 @@ def copy_dataset_to_mem_fs(mem_fs, dataset_zip_file_path):
 
 def main(args):
   if args.run_mode == TRAIN_RUN_MODE:
+    # all new operations will be in train mode from now on
+    tf.keras.backend.set_learning_phase(1)
     tf.logging.info("Starting training")
   elif args.run_mode == EVAL_RUN_MODE:
+    # all new operations will be in test mode from now on
+    tf.keras.backend.set_learning_phase(0)
     tf.logging.info("Starting evaluation")
   else:
     assert args.run_mode == SAVE_MODEL_RUN_MODE
