@@ -20,7 +20,6 @@ from trainer.generator import Generator
 from trainer.local_discriminator import LocalDiscriminator
 from trainer.global_discriminator import GlobalDiscriminator
 
-
 TRAIN_RUN_MODE = 'TRAIN'
 EVAL_RUN_MODE = 'EVAL'
 SAVE_MODEL_RUN_MODE = 'SAVE_MODEL'
@@ -39,6 +38,7 @@ PATCH_SIZE = 32
 PATH_FILE_BUFFER_SIZE = 1000000
 SHUFFLE_BUFFER_SIZE = 1000
 PARALLEL_MAP_THREADS = 16
+
 
 def get_reference_image_path_fn(train_reference_paths_dict):
   def get_reference_image_path(image_path):
@@ -223,18 +223,23 @@ def train(dataset, generator, local_discriminator, global_discriminator,
     gen_optimizer = tf.train.AdamOptimizer(args.gen_learning_rate).minimize(
       gen_loss, var_list=generator.variables,
       global_step=global_step)
-    tf.logging.debug('Generator variables {}'.format([v.name for v in generator.variables]))
+    tf.logging.debug(
+      'Generator variables {}'.format([v.name for v in generator.variables]))
 
     # TODO Seems that the disc optimizer is propagating changes to the generator.
-    local_disc_optimizer = tf.train.AdamOptimizer(args.disc_learning_rate).minimize(
+    local_disc_optimizer = tf.train.AdamOptimizer(
+      args.disc_learning_rate).minimize(
       local_disc_loss, var_list=local_discriminator.variables,
       global_step=global_step)
-    tf.logging.debug('Local discriminator variables {}'.format([v.name for v in local_discriminator.variables]))
+    tf.logging.debug('Local discriminator variables {}'.format(
+      [v.name for v in local_discriminator.variables]))
 
-    global_disc_optimizer = tf.train.AdamOptimizer(args.disc_learning_rate).minimize(
+    global_disc_optimizer = tf.train.AdamOptimizer(
+      args.disc_learning_rate).minimize(
       global_disc_loss, var_list=global_discriminator.variables,
       global_step=global_step)
-    tf.logging.debug('Global discriminator variables {}'.format([v.name for v in global_discriminator.variables]))
+    tf.logging.debug('Global discriminator variables {}'.format(
+      [v.name for v in global_discriminator.variables]))
 
   optimizers = tf.group(
     [gen_optimizer, local_disc_optimizer, global_disc_optimizer])
@@ -252,7 +257,8 @@ def train(dataset, generator, local_discriminator, global_discriminator,
     tf.logging.debug("GLOBAL_DISC BN LAYERS {}".format(global_disc_bn_layers))
 
     tf.logging.debug("PRINTING BN WEIGHTS")
-    for bn_layer in (gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
+    for bn_layer in (
+            gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
       tf.logging.debug("Weights: {}".format(bn_layer.weights))
 
   tf.logging.info("GENERATOR")
@@ -392,7 +398,6 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
   tf.logging.info("GLOBAL DISCRIMINATOR")
   global_discriminator.summary()
 
-
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
   tf.summary.scalar('global_disc_loss', global_disc_loss)
@@ -415,7 +420,8 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
           checkpoint_dir=os.path.join(args.experiment_dir, "train")) as sess:
     tf.logging.info("Starting evaluation.")
 
-    writer = tf.summary.FileWriter(os.path.join(args.experiment_dir, "eval"), sess.graph)
+    writer = tf.summary.FileWriter(os.path.join(args.experiment_dir, "eval"),
+                                   sess.graph)
 
     while True:
       if (args.batch_normalization):
@@ -468,8 +474,12 @@ def save_model(generator, experiment_dir, model_number):
 
   global_step = tf.train.get_or_create_global_step()
 
-  masked_images = tf.placeholder(tf.float32, name='masked_images_ph')
-  reference_images = tf.placeholder(tf.float32, name='reference_images_ph')
+  masked_images = tf.placeholder(tf.float32,
+                                 shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3],
+                                 name='masked_images_ph')
+  reference_images = tf.placeholder(tf.float32,
+                                    shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3],
+                                    name='reference_images_ph')
 
   generated_patches = generator([masked_images, reference_images],
                                 training=False)
@@ -667,8 +677,10 @@ if __name__ == "__main__":
     choices=['DEBUG', 'ERROR', 'FATAL', 'INFO', 'WARN'],
     default='INFO')
 
-  parser.add_argument('--batch_normalization', dest='batch_normalization', action='store_true')
-  parser.add_argument('--no_batch_normalization', dest='batch_normalization', action='store_false')
+  parser.add_argument('--batch_normalization', dest='batch_normalization',
+                      action='store_true')
+  parser.add_argument('--no_batch_normalization', dest='batch_normalization',
+                      action='store_false')
   parser.set_defaults(batch_normalization=False)
 
   parser.add_argument(
