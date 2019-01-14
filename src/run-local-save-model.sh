@@ -3,7 +3,7 @@
 #EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/checkpoints"
 #rm -rf $EXPERIMENT_DIR/*
 
-EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/trained-models/two_face_v5_1"
+EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/trained-models/two_face_v6_rec_loss"
 
 #BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 #EXPERIMENT_NAME="casia_vgg_rec_only_v4_5_2"
@@ -29,6 +29,6 @@ gcloud ml-engine local train \
     --facenet_dir $FACENET_DIR \
     --run_mode "SAVE_MODEL" \
     --model_number 1 \
-    --verbosity "INFO" \
+    --verbosity "DEBUG" \
     \
-    --no_batch_normalization
+    --batch_normalization
