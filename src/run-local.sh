@@ -8,6 +8,7 @@ rm -rf $EXPERIMENT_DIR/*
 DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data/train_data"
 # DATASET_PATH="/home/gaston/workspace/datasets/CASIA-WebFace/CASIA-WebFace/data/train_data/data.zip"
 # DATASET_PATH="gs://two-face-inpainting-mlengine/sample-data"
+# DATASET_PATH="gs://two-face-inpainting-mlengine/data/data.zip"
 
 FACENET_DIR="/home/gaston/workspace/two-face/facenet"
 
@@ -19,7 +20,17 @@ gcloud ml-engine local train \
     --dataset_path $DATASET_PATH \
     --experiment_dir $EXPERIMENT_DIR \
     --facenet_dir $FACENET_DIR \
-    --batch_size 8 \
     --run_mode "TRAIN" \
-    --verbosity "INFO" \
-    --config_train_file config-train.json
+    --verbosity "DEBUG" \
+    \
+    --batch_normalization \
+    --batch_size 8 \
+    --max_steps 1e4 \
+    --gen_learning_rate 3e-5 \
+    --disc_learning_rate 3e-5 \
+    --lambda_rec 1.0 \
+    --lambda_adv_local 0.0 \
+    --lambda_adv_global 0.0 \
+    --lambda_id 0.0 \
+    --lambda_local_disc 0.0 \
+    --lambda_global_disc 0.0

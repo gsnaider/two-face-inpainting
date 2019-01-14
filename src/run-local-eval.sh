@@ -1,9 +1,9 @@
 #!/bin/bash
 
-#EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/checkpoints"
+EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/checkpoints"
 #rm -rf $EXPERIMENT_DIR/*
 
-EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/trained-models/full_trained"
+#EXPERIMENT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/trained-models/full_trained"
 
 #BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 #EXPERIMENT_NAME="casia_vgg_rec_only_v4_5_2"
@@ -28,6 +28,14 @@ gcloud ml-engine local train \
     --dataset_path $DATASET_PATH \
     --experiment_dir $EXPERIMENT_DIR \
     --facenet_dir $FACENET_DIR \
-    --batch_size 8 \
     --run_mode "EVAL" \
-    --verbosity "INFO"
+    --verbosity "DEBUG" \
+    \
+    --batch_normalization \
+    --batch_size 8 \
+    --lambda_rec 1.0 \
+    --lambda_adv_local 0.0 \
+    --lambda_adv_global 0.0 \
+    --lambda_id 0.0 \
+    --lambda_local_disc 0.0 \
+    --lambda_global_disc 0.0
