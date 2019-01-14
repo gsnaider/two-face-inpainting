@@ -240,12 +240,12 @@ def train(dataset, generator, local_discriminator, global_discriminator,
     [gen_optimizer, local_disc_optimizer, global_disc_optimizer])
 
   if (args.batch_normalization):
-    gen_bn_layers = [generator.layers[10], generator.layers[13]]
-    local_disc_bn_layers = [local_discriminator.layers[3],
-                            local_discriminator.layers[6]]
-    global_disc_bn_layers = [global_discriminator.layers[3],
-                             global_discriminator.layers[6],
-                             global_discriminator.layers[10]]
+    gen_bn_layers = [generator.layers[8], generator.layers[11]]
+    local_disc_bn_layers = [local_discriminator.layers[2],
+                            local_discriminator.layers[5]]
+    global_disc_bn_layers = [global_discriminator.layers[2],
+                             global_discriminator.layers[5],
+                             global_discriminator.layers[9]]
 
     tf.logging.debug("GENERATOR BN LAYERS {}".format(gen_bn_layers))
     tf.logging.debug("LOCAL_DISC BN LAYERS {}".format(local_disc_bn_layers))
@@ -254,6 +254,13 @@ def train(dataset, generator, local_discriminator, global_discriminator,
     tf.logging.debug("PRINTING BN WEIGHTS")
     for bn_layer in (gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
       tf.logging.debug("Weights: {}".format(bn_layer.weights))
+
+  tf.logging.info("GENERATOR")
+  generator.summary()
+  tf.logging.info("LOCAL DISCRIMINATOR")
+  local_discriminator.summary()
+  tf.logging.info("GLOBAL DISCRIMINATOR")
+  global_discriminator.summary()
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
@@ -362,12 +369,12 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
         global_discriminator.inputs))))
 
   if (args.batch_normalization):
-    gen_bn_layers = [generator.layers[10], generator.layers[13]]
-    local_disc_bn_layers = [local_discriminator.layers[3],
-                            local_discriminator.layers[6]]
-    global_disc_bn_layers = [global_discriminator.layers[3],
-                             global_discriminator.layers[6],
-                             global_discriminator.layers[10]]
+    gen_bn_layers = [generator.layers[8], generator.layers[11]]
+    local_disc_bn_layers = [local_discriminator.layers[2],
+                            local_discriminator.layers[5]]
+    global_disc_bn_layers = [global_discriminator.layers[2],
+                             global_discriminator.layers[5],
+                             global_discriminator.layers[9]]
 
     tf.logging.debug("GENERATOR BN LAYERS {}".format(gen_bn_layers))
     tf.logging.debug("LOCAL_DISC BN LAYERS {}".format(local_disc_bn_layers))
@@ -377,6 +384,14 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
     for bn_layer in (
             gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
       tf.logging.debug("Weights: {}".format(bn_layer.weights))
+
+  tf.logging.info("GENERATOR")
+  generator.summary()
+  tf.logging.info("LOCAL DISCRIMINATOR")
+  local_discriminator.summary()
+  tf.logging.info("GLOBAL DISCRIMINATOR")
+  global_discriminator.summary()
+
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
