@@ -5,7 +5,7 @@ JOB_NAME="casia_vgg_$now"
 REGION="us-central1"
 
 BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
-EXPERIMENT_NAME="two_face_v5_2"
+EXPERIMENT_NAME="two_face_v6_rec_loss"
 EXPERIMENT_DIR="$BASE_DIR/$EXPERIMENT_NAME"
 
 # DATASET_PATH="gs://two-face-inpainting-mlengine/eval_data"
