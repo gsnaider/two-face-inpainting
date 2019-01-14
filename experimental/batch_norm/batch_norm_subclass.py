@@ -1,6 +1,9 @@
+import os
+
 import numpy as np
 import tensorflow as tf
 
+CHECKPOINT_DIR="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_subclass"
 
 class MyModel(tf.keras.Model):
 
@@ -88,7 +91,7 @@ bn_weights = model.layers[0].weights
 print("BN Weights {}".format(bn_weights))
 
 with tf.train.MonitoredTrainingSession(
-        checkpoint_dir="/home/gaston/workspace/two-face/two-face-inpainting-experiments/local-runs/batch_norm_subclass/train",
+        checkpoint_dir=os.path.join(CHECKPOINT_DIR, "train"),
         save_checkpoint_steps=1000,
         hooks=hooks) as sess:
   print("Gamma {} - Beta {} - Moving mean {} - Moving variance {}".format(
