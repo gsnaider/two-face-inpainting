@@ -16,6 +16,10 @@ import numpy as np
 import os
 
 import trainer.model as model
+from trainer.generator import Generator
+from trainer.local_discriminator import LocalDiscriminator
+from trainer.global_discriminator import GlobalDiscriminator
+
 
 TRAIN_RUN_MODE = 'TRAIN'
 EVAL_RUN_MODE = 'EVAL'
@@ -541,14 +545,10 @@ def main(args):
     assert args.run_mode == SAVE_MODEL_RUN_MODE
     tf.logging.info("Creating model for inference")
 
-  # Have to use train=True, otherwise the images generated are saturated for some
-  # reason, probably because Batch Normalization.
-  # TODO try removing Batch Normalization and see if this is solved.
-  # TODO maybe switch to Dropout
-  # generator, local_discriminator, global_discriminator, facenet = model.make_models(
-  #   args.facenet_dir, train=True)
-  generator, local_discriminator, global_discriminator, facenet = model.make_models(
-    args.facenet_dir, train=(args.run_mode == TRAIN_RUN_MODE), use_batch_norm=args.batch_normalization)
+  generator = Generator()
+  local_discriminator = LocalDiscriminator()
+  global_discriminator = GlobalDiscriminator()
+  facenet = model.make_identity_model(args.facenet_dir)
 
   if args.run_mode == SAVE_MODEL_RUN_MODE:
     save_model(generator, args.experiment_dir, args.model_number)
