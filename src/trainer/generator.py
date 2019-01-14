@@ -139,7 +139,7 @@ class Generator(tf.keras.Model):
     masked_encoding = self.masked_encoder(masked_image)
     reference_encoding = self.reference_encoder(reference_image)
 
-    x = self.concat(masked_encoding, reference_encoding)
+    x = self.concat([masked_encoding, reference_encoding])
 
     x = self.channel_wise_fc(x)
 

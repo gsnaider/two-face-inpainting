@@ -52,6 +52,8 @@ class GlobalDiscriminator(tf.keras.Model):
   def call(self, inputs, training=False):
     x = inputs
 
+    x = self.encoder(x)
+
     x = self.conv_1(x)
     x = self.batch_norm_1(x, training=training)
     x = self.relu_1(x)
