@@ -4,23 +4,24 @@ import os
 import tempfile
 
 def make_identity_model(facenet_dir):
-  facenet_model_path = os.path.join(facenet_dir, 'facenet_model_128.json')
-  facenet_weights_path = os.path.join(facenet_dir, 'facenet_weights.h5')
+  with tf.name_scope("facenet"):
+    facenet_model_path = os.path.join(facenet_dir, 'facenet_model_128.json')
+    facenet_weights_path = os.path.join(facenet_dir, 'facenet_weights.h5')
 
-  facenet = tf.keras.models.model_from_json(
-    tf.gfile.GFile(facenet_model_path, "r").read())
+    facenet = tf.keras.models.model_from_json(
+      tf.gfile.GFile(facenet_model_path, "r").read())
 
-  # This has to be done in order to be able to read the model from GCS
-  model_file = tf.gfile.GFile(facenet_weights_path, mode='rb')
-  temp_model_file = tempfile.NamedTemporaryFile(suffix='.h5', delete=True)
-  temp_model_file.write(model_file.read())
-  model_file.close()
+    # This has to be done in order to be able to read the model from GCS
+    model_file = tf.gfile.GFile(facenet_weights_path, mode='rb')
+    temp_model_file = tempfile.NamedTemporaryFile(suffix='.h5', delete=True)
+    temp_model_file.write(model_file.read())
+    model_file.close()
 
-  tf.logging.debug(
-    'Reading Facenet weights from temp file: {}'.format(temp_model_file.name))
-  facenet.load_weights(temp_model_file.name)
-  facenet.trainable = False
-  temp_model_file.close()
+    tf.logging.debug(
+      'Reading Facenet weights from temp file: {}'.format(temp_model_file.name))
+    facenet.load_weights(temp_model_file.name)
+    facenet.trainable = False
+    temp_model_file.close()
 
   return facenet
 
