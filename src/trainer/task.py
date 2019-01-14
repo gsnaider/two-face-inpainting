@@ -282,7 +282,6 @@ def train(dataset, generator, local_discriminator, global_discriminator,
           checkpoint_dir=os.path.join(args.experiment_dir, "train"),
           hooks=hooks) as sess:
     while not sess.should_stop():
-
       if (args.batch_normalization):
         # TODO remove these (and all other related debug logs) after verifying BN works correctly.
         tf.logging.debug(
@@ -517,14 +516,11 @@ def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
     image_content = tf.py_func(
       get_read_images_from_fs_fn(dataset_fs, base_path), [img_filename],
       tf.string)
-    image = tf.image.decode_image(image_content, channels=3)
 
-    # TODO see if it's worth to use tf.image.resize_images along with tf.image.decode_jpeg.
-    # But that would have the problem that we need to analyze the full image, not just the face.
-    # By cropping, we only remain with the face.
-    image = tf.image.resize_image_with_crop_or_pad(image, IMAGE_SIZE,
-                                                   IMAGE_SIZE)
+    image = tf.image.decode_jpeg(image_content, channels=3)
     image = tf.image.convert_image_dtype(image, tf.float32)
+    image = tf.image.resize_images(image, [IMAGE_SIZE,
+                                                   IMAGE_SIZE])
 
     if masked:
       reference_image_filename = tf.py_func(
@@ -535,10 +531,10 @@ def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
         [reference_image_filename],
         tf.string)
 
-      reference = tf.image.decode_image(reference_content, channels=3)
-      reference = tf.image.resize_image_with_crop_or_pad(reference, IMAGE_SIZE,
-                                                         IMAGE_SIZE)
+      reference = tf.image.decode_jpeg(reference_content, channels=3)
       reference = tf.image.convert_image_dtype(reference, tf.float32)
+      reference = tf.image.resize_images(reference, [IMAGE_SIZE,
+                                                         IMAGE_SIZE])
 
       mask_image = get_mask_fn(IMAGE_SIZE, PATCH_SIZE)(image)
       return mask_image, image, reference
