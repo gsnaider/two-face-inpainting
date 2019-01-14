@@ -55,6 +55,7 @@ def make_generator_encoder(train, use_batch_norm=False):
     # 16x16x512
 
     if (use_batch_norm):
+      tf.logging.debug("BatchNorm training={}".format(train))
       gen_encoder = tf.keras.layers.BatchNormalization()(gen_encoder,
                                                          training=train)
     gen_encoder = tf.keras.layers.LeakyReLU()(gen_encoder)
@@ -64,6 +65,7 @@ def make_generator_encoder(train, use_batch_norm=False):
                                          padding='same')(gen_encoder)
 
     if (use_batch_norm):
+      tf.logging.debug("BatchNorm training={}".format(train))
       gen_encoder = tf.keras.layers.BatchNormalization()(gen_encoder,
                                                          training=train)
     gen_encoder = tf.keras.layers.LeakyReLU()(gen_encoder)
@@ -133,6 +135,7 @@ def make_generator_model(train=False, use_batch_norm=False):
                                                input_shape=(16, 16, 256))(
       encoding)
     if (use_batch_norm):
+      tf.logging.debug("BatchNorm training={}".format(train))
       encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
     encoding = tf.keras.layers.LeakyReLU()(encoding)
     # 16x16x128
@@ -144,6 +147,7 @@ def make_generator_model(train=False, use_batch_norm=False):
                                                input_shape=(16, 16, 128))(
       encoding)
     if (use_batch_norm):
+      tf.logging.debug("BatchNorm training={}".format(train))
       encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
     encoding = tf.keras.layers.LeakyReLU()(encoding)
     # 16x16x64
@@ -189,6 +193,7 @@ def make_local_discriminator_model(train, use_batch_norm=False):
                                       padding='same',
                                       input_shape=(6, 6, 256))(encoding)
     if (use_batch_norm):
+      tf.logging.debug("BatchNorm training={}".format(train))
       encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
     encoding = tf.keras.layers.LeakyReLU()(encoding)
     # 4x4x128
@@ -198,6 +203,7 @@ def make_local_discriminator_model(train, use_batch_norm=False):
                                       padding='same',
                                       input_shape=(4, 4, 128))(encoding)
     if (use_batch_norm):
+      tf.logging.debug("BatchNorm training={}".format(train))
       encoding = tf.keras.layers.BatchNormalization()(encoding, training=train)
     encoding = tf.keras.layers.LeakyReLU()(encoding)
     # 4x4x64
@@ -244,6 +250,7 @@ def make_global_discriminator_model(train, use_batch_norm=False):
                                           padding='same')(disc_encoder)
     # 16x16x256
     if (use_batch_norm):
+      tf.logging.debug("BatchNorm training={}".format(train))
       disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder,
                                                         training=train)
     disc_encoder = tf.keras.layers.LeakyReLU()(disc_encoder)
@@ -252,6 +259,7 @@ def make_global_discriminator_model(train, use_batch_norm=False):
                                           strides=(1, 1),
                                           padding='same')(disc_encoder)
     if (use_batch_norm):
+      tf.logging.debug("BatchNorm training={}".format(train))
       disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder,
                                                         training=train)
     disc_encoder = tf.keras.layers.LeakyReLU()(disc_encoder)
@@ -265,6 +273,7 @@ def make_global_discriminator_model(train, use_batch_norm=False):
                                           strides=(1, 1),
                                           padding='same')(disc_encoder)
     if (use_batch_norm):
+      tf.logging.debug("BatchNorm training={}".format(train))
       disc_encoder = tf.keras.layers.BatchNormalization()(disc_encoder,
                                                         training=train)
     disc_encoder = tf.keras.layers.LeakyReLU()(disc_encoder)
