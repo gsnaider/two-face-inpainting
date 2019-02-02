@@ -563,6 +563,7 @@ def main(args):
     tf.keras.backend.set_learning_phase(0)
     tf.logging.info("Starting evaluation")
   else:
+    tf.keras.backend.set_learning_phase(0)
     assert args.run_mode == SAVE_MODEL_RUN_MODE
     tf.logging.info("Creating model for inference")
 
