@@ -26,7 +26,7 @@ def show_imgs(images):
     plt.imshow(images[i, :, :], cmap='gray')
     plt.axis('off')
 
-  plt.subplots_adjust(wspace=0.01, hspace=0.01)
+  plt.subplots_adjust(wspace=0.03, hspace=0.03)
   plt.show()
 
 tf.enable_eager_execution()
