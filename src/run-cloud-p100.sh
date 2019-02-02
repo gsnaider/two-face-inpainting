@@ -6,7 +6,7 @@ REGION="us-central1"
 
 BASE_DIR="gs://two-face-inpainting-mlengine/experiments"
 
-EXPERIMENT_NAME="two_face_v6_rec_loss"
+EXPERIMENT_NAME="two_face_v6_1_facenet_2"
 
 EXPERIMENT_DIR="$BASE_DIR/$EXPERIMENT_NAME"
 
@@ -34,12 +34,12 @@ gcloud ml-engine jobs submit training $JOB_NAME \
     \
     --batch_normalization \
     --batch_size 64 \
-    --max_steps 30e3 \
-    --gen_learning_rate 1e-5 \
-    --disc_learning_rate 1e-5 \
+    --max_steps 40e3 \
+    --gen_learning_rate 1e-6 \
+    --disc_learning_rate 1e-6 \
     --lambda_rec 1.0 \
-    --lambda_adv_local 0.0 \
-    --lambda_adv_global 0.0 \
-    --lambda_id 0.0 \
-    --lambda_local_disc 0.0 \
-    --lambda_global_disc 0.0
+    --lambda_adv_local 0.01 \
+    --lambda_adv_global 0.005 \
+    --lambda_id 0.01 \
+    --lambda_local_disc 0.1 \
+    --lambda_global_disc 0.1

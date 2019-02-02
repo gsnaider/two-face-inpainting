@@ -21,13 +21,13 @@ gcloud ml-engine local train \
     --experiment_dir $EXPERIMENT_DIR \
     --facenet_dir $FACENET_DIR \
     --run_mode "TRAIN" \
-    --verbosity "DEBUG" \
+    --verbosity "INFO" \
     \
     --batch_normalization \
     --batch_size 8 \
     --max_steps 1e4 \
-    --gen_learning_rate 3e-5 \
-    --disc_learning_rate 3e-5 \
+    --gen_learning_rate 1e-5 \
+    --disc_learning_rate 1e-5 \
     --lambda_rec 1.0 \
     --lambda_adv_local 0.0 \
     --lambda_adv_global 0.0 \
