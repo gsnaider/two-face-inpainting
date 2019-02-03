@@ -196,7 +196,10 @@ def train(dataset, generator, discriminator, validation_images,
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('disc_loss', disc_loss)
-  tf.summary.image('generated_train_images', generated_images, max_outputs=9)
+  tf.summary.image('generated_train_images', generated_images, max_outputs=8)
+  tf.summary.image('masked_images', masked_images, max_outputs=8)
+  tf.summary.image('original_images', unmasked_images, max_outputs=8)
+  tf.summary.image('reference_images', masked_reference_images, max_outputs=8)
 
   # TODO see why validation images are not being generated correctly.
   # generated_validation_images = generate_images(generator,
