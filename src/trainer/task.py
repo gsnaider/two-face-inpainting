@@ -80,20 +80,32 @@ def create_reference_paths_dict(reference_dict_file_path):
   return reference_dict
 
 
-def get_mask_fn(img_size, patch_size, use_batch=False):
-  patch_start = (img_size - patch_size) // 2
-  img_size_after_patch = img_size - (patch_start + patch_size)
-
+def get_mask_fn(img_size, patch_size):
   def mask_fn(image):
     """
-    Applies a mask of zeroes of size (patch_size x patch_size) at the center of the image.
-    Returns a tuple of the masked image and the original image.
+    Applies a mask of zeroes of size (patch_size x patch_size) at a random place in the image.
+    Returns a tuple of the masked image and the binary mask matrix (0=mask, 1=visible).
     """
-    upper_edge = tf.ones([patch_start, img_size, 3], tf.float32)
-    lower_edge = tf.ones([img_size_after_patch, img_size, 3], tf.float32)
 
-    middle_left = tf.ones([patch_size, patch_start, 3], tf.float32)
-    middle_right = tf.ones([patch_size, img_size_after_patch, 3],
+    # Upper left point of patch
+    patch_x = tf.random.uniform([1], minval=0, maxval=img_size - patch_size + 1, dtype=tf.int32)
+    patch_y = tf.random.uniform([1], minval=0, maxval=img_size - patch_size + 1, dtype=tf.int32)
+
+    # TODO testing (remove). Trying border cases
+    # patch_x = 0
+    # patch_y = 0
+    # patch_x = img_size - patch_size + 1
+    # patch_y = img_size - patch_size + 1
+
+    # TODO need to convert the patch_size and img_size to tensors for this to work
+    column_width_after_patch = img_size - (patch_x + patch_size)
+    row_height_after_patch = img_size - (patch_y + patch_size)
+
+    upper_edge = tf.ones([patch_y, img_size, 3], tf.float32)
+    lower_edge = tf.ones([row_height_after_patch, img_size, 3], tf.float32)
+
+    middle_left = tf.ones([patch_size, patch_x, 3], tf.float32)
+    middle_right = tf.ones([patch_size, column_width_after_patch, 3],
                            tf.float32)
 
     zeros = tf.zeros([patch_size, patch_size, 3], tf.float32)
@@ -101,10 +113,9 @@ def get_mask_fn(img_size, patch_size, use_batch=False):
     middle = tf.concat([middle_left, zeros, middle_right], axis=1)
     mask = tf.concat([upper_edge, middle, lower_edge], axis=0)
 
-    if use_batch:
-      mask = tf.expand_dims(mask, axis=0)
-
-    return image * mask
+    # Mask is created with 3 channels in order to multiply with image, but since
+    # all the channels are the same, we can just return one of them.
+    return image * mask, tf.expand_dims(mask[:, :, 0], axis=2)
 
   return mask_fn
 
@@ -161,16 +172,17 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   iterator = dataset.make_one_shot_iterator()
 
   train_batch = iterator.get_next()
-  full_images = train_batch[0]
-  (masked_images, unmasked_images, reference_images) = train_batch[1]
+  real_images = train_batch[0]
+  (masked_images, masks, original_images, reference_images) = train_batch[1]
 
+  # TODO pass the masks to the generator as well.
   generated_patches = generator([masked_images, reference_images],
                                 training=True)
 
   generated_images = patch_image(generated_patches, masked_images)
 
   # Local discriminator
-  local_real_output = local_discriminator(extract_patch(full_images),
+  local_real_output = local_discriminator(extract_patch(real_images),
                                           training=True)
   local_generated_output = local_discriminator(generated_patches,
                                                training=True)
@@ -179,7 +191,7 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                                              args.lambda_local_disc)
 
   # Global discriminator
-  global_real_output = global_discriminator(full_images, training=True)
+  global_real_output = global_discriminator(real_images, training=True)
   global_generated_output = global_discriminator(generated_images,
                                                  training=True)
   global_disc_loss = model.discriminator_loss(global_real_output,
@@ -187,7 +199,7 @@ def train(dataset, generator, local_discriminator, global_discriminator,
                                               args.lambda_global_disc)
 
   # Generator
-  gen_loss = model.generator_loss(unmasked_images, generated_images,
+  gen_loss = model.generator_loss(original_images, generated_images,
                                   reference_images, local_generated_output,
                                   global_generated_output, args.lambda_rec,
                                   args.lambda_adv_local, args.lambda_adv_global,
@@ -274,7 +286,7 @@ def train(dataset, generator, local_discriminator, global_discriminator,
 
   tf.summary.image('generated_train_images', generated_images, max_outputs=8)
   tf.summary.image('masked_train_image', masked_images, max_outputs=8)
-  tf.summary.image('original_train_image', unmasked_images, max_outputs=8)
+  tf.summary.image('original_train_image', original_images, max_outputs=8)
   tf.summary.image('reference_train_images', reference_images, max_outputs=8)
 
   hooks = [tf.train.StopAtStepHook(num_steps=args.max_steps)]
@@ -513,6 +525,17 @@ def get_read_images_from_fs_fn(dataset_fs, base_path):
 def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
                                      reference_dict, masked=False):
   def load_and_preprocess_image(img_filename):
+    """
+    Loads the image from the dataset filesystem, converts it to float32 and
+    resizes it to IMAGE_SIZE x IMAGE_SIZE.
+    If the masked flag is set to True, it also searches for a reference image in
+    the reference_dict, applying the same process as for the original image, and
+    applies a binary mask to the original image.
+
+    Returns the loaded image if masked is set to False. Otherwise returns a
+    tuple of the masked image, the binary mask matrix (0=mask, 1=visible), the
+    original image, and the reference image,
+    """
     image_content = tf.py_func(
       get_read_images_from_fs_fn(dataset_fs, base_path), [img_filename],
       tf.string)
@@ -536,8 +559,8 @@ def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
       reference = tf.image.resize_images(reference, [IMAGE_SIZE,
                                                          IMAGE_SIZE])
 
-      mask_image = get_mask_fn(IMAGE_SIZE, PATCH_SIZE)(image)
-      return mask_image, image, reference
+      mask_image, mask = get_mask_fn(IMAGE_SIZE, PATCH_SIZE)(image)
+      return mask_image, mask, image, reference
     else:
       return image
 

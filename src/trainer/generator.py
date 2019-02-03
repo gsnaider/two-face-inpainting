@@ -76,7 +76,8 @@ class GeneratorEncoder(tf.keras.Model):
 
     return x
 
-
+# TODO when receiving the mask, concate with image as another channel:
+# tf.concat([mask_image, mask], axis=2)
 class Generator(tf.keras.Model):
   def __init__(self):
     super(Generator, self).__init__(name='generator')
