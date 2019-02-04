@@ -88,8 +88,8 @@ def get_mask_fn(img_size, patch_size):
     """
 
     # Upper left point of patch
-    patch_x = tf.random.uniform([1], minval=0, maxval=img_size - patch_size + 1, dtype=tf.int32)
-    patch_y = tf.random.uniform([1], minval=0, maxval=img_size - patch_size + 1, dtype=tf.int32)
+    patch_x = tf.random.uniform(shape=[], minval=0, maxval=img_size - patch_size + 1, dtype=tf.int32)
+    patch_y = tf.random.uniform(shape=[], minval=0, maxval=img_size - patch_size + 1, dtype=tf.int32)
 
     # TODO testing (remove). Trying border cases
     # patch_x = 0
@@ -98,17 +98,23 @@ def get_mask_fn(img_size, patch_size):
     # patch_y = img_size - patch_size + 1
 
     # TODO need to convert the patch_size and img_size to tensors for this to work
-    column_width_after_patch = img_size - (patch_x + patch_size)
-    row_height_after_patch = img_size - (patch_y + patch_size)
+    img_size_tensor = tf.convert_to_tensor(img_size)
+    patch_size_tensor = tf.convert_to_tensor(patch_size)
 
-    upper_edge = tf.ones([patch_y, img_size, 3], tf.float32)
-    lower_edge = tf.ones([row_height_after_patch, img_size, 3], tf.float32)
+    column_width_after_patch = img_size_tensor - (patch_x + patch_size_tensor)
+    row_height_after_patch = img_size_tensor - (patch_y + patch_size_tensor)
 
-    middle_left = tf.ones([patch_size, patch_x, 3], tf.float32)
-    middle_right = tf.ones([patch_size, column_width_after_patch, 3],
+
+    tf.logging.debug("patch_y: {}".format(patch_y))
+    tf.logging.debug("img_size_tensor: {}".format(img_size_tensor))
+    upper_edge = tf.ones([patch_y, img_size_tensor, 3], tf.float32)
+    lower_edge = tf.ones([row_height_after_patch, img_size_tensor, 3], tf.float32)
+
+    middle_left = tf.ones([patch_size_tensor, patch_x, 3], tf.float32)
+    middle_right = tf.ones([patch_size_tensor, column_width_after_patch, 3],
                            tf.float32)
 
-    zeros = tf.zeros([patch_size, patch_size, 3], tf.float32)
+    zeros = tf.zeros([patch_size_tensor, patch_size_tensor, 3], tf.float32)
 
     middle = tf.concat([middle_left, zeros, middle_right], axis=1)
     mask = tf.concat([upper_edge, middle, lower_edge], axis=0)
