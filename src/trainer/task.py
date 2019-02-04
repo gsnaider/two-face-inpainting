@@ -84,7 +84,7 @@ def get_mask_fn(img_size, patch_size):
   def mask_fn(image):
     """
     Applies a mask of zeroes of size (patch_size x patch_size) at a random place in the image.
-    Returns a tuple of the masked image and the binary mask matrix (0=mask, 1=visible).
+    Returns a tuple of the masked image, the mask left_x, upper_y, and the binary mask matrix (0=mask, 1=visible).
     """
 
     # Upper left point of patch
@@ -121,7 +121,7 @@ def get_mask_fn(img_size, patch_size):
 
     # Mask is created with 3 channels in order to multiply with image, but since
     # all the channels are the same, we can just return one of them.
-    return image * mask, tf.expand_dims(mask[:, :, 0], axis=2)
+    return image * mask, patch_x, patch_y, tf.expand_dims(mask[:, :, 0], axis=2)
 
   return mask_fn
 
@@ -132,22 +132,26 @@ def extract_patch(image):
   return image[:, patch_start:patch_end, patch_start:patch_end, :]
 
 
-def patch_image(patch, image):
+def patch_image(patch, image, patch_left_x, patch_uppper_y):
   """
   Apply the given patch to the image.
-  The patch is applied at the center of the image, assuming a 7x7 patch and a 28x28 image.
+  The patch is applied with the upper-left corner on (patch_left_x, patch_uppper_y).
   """
 
-  patch_start = (IMAGE_SIZE - PATCH_SIZE) // 2
-  patch_end = patch_start + PATCH_SIZE
+  # TODO: See if this could be done more elegant.
 
-  # TODO: See if this could be done more efficiently.
+  tf.logging.debug("PATCH SHAPE: {}".format(tf.shape(patch)))
+  tf.logging.debug("LEFT_X_SHAPE: {}".format(tf.shape(patch_left_x)))
 
-  upper_edge = image[:, :patch_start, :, :]
-  lower_edge = image[:, patch_end:, :, :]
+  patch_right_x = patch_left_x + tf.shape(patch)[2]
+  patch_bottom_y = patch_uppper_y + tf.shape(patch)[1]
 
-  middle_left = image[:, patch_start:patch_end, :patch_start, :]
-  middle_right = image[:, patch_start:patch_end, patch_end:, :]
+  # TODO seems this is failing because the patch_uppper_y, patch_left_x, etc have batch dimensions now.
+  upper_edge = image[:, :patch_uppper_y, :, :]
+  lower_edge = image[:, patch_bottom_y:, :, :]
+
+  middle_left = image[:, patch_uppper_y:patch_bottom_y, :patch_left_x, :]
+  middle_right = image[:, patch_uppper_y:patch_bottom_y, patch_right_x:, :]
 
   middle = tf.concat([middle_left, patch, middle_right], axis=2)
   return tf.concat([upper_edge, middle, lower_edge], axis=1)
@@ -179,13 +183,13 @@ def train(dataset, generator, local_discriminator, global_discriminator,
 
   train_batch = iterator.get_next()
   real_images = train_batch[0]
-  (masked_images, masks, original_images, reference_images) = train_batch[1]
+  (masked_images, mask_points, masks, original_images, reference_images) = train_batch[1]
 
-  # TODO pass the masks to the generator as well.
   generated_patches = generator([masked_images, reference_images],
                                 training=True)
 
-  generated_images = patch_image(generated_patches, masked_images)
+  generated_images = patch_image(generated_patches, masked_images,
+                                 patch_left_x=mask_points[0], patch_uppper_y=mask_points[1])
 
   # Local discriminator
   local_real_output = local_discriminator(extract_patch(real_images),
@@ -290,6 +294,7 @@ def train(dataset, generator, local_discriminator, global_discriminator,
 
   tf.summary.image('generated_train_images', generated_images, max_outputs=8)
   tf.summary.image('masked_train_image', masked_images, max_outputs=8)
+  tf.summary.image('masks', masks, max_outputs=8)
   tf.summary.image('original_train_image', original_images, max_outputs=8)
   tf.summary.image('reference_train_images', reference_images, max_outputs=8)
 
@@ -455,8 +460,9 @@ def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
     applies a binary mask to the original image.
 
     Returns the loaded image if masked is set to False. Otherwise returns a
-    tuple of the masked image, the binary mask matrix (0=mask, 1=visible), the
-    original image, and the reference image,
+    tuple of the masked image, the left_x and upper_y point of the mask, the
+    binary mask matrix (0=mask, 1=visible), the original image, and the
+    reference image.
     """
     image_content = tf.py_func(
       get_read_images_from_fs_fn(dataset_fs, base_path), [img_filename],
@@ -481,13 +487,12 @@ def get_load_and_preprocess_image_fn(dataset_fs, base_path, reference_base_path,
       reference = tf.image.resize_images(reference, [IMAGE_SIZE,
                                                          IMAGE_SIZE])
 
-      mask_image, mask = get_mask_fn(IMAGE_SIZE, PATCH_SIZE)(image)
-      return mask_image, mask, image, reference
+      mask_image, mask_x, mask_y, mask = get_mask_fn(IMAGE_SIZE, PATCH_SIZE)(image)
+      return mask_image, (mask_x, mask_y), mask, image, reference
     else:
       return image
 
   return load_and_preprocess_image
-
 
 def copy_dataset_to_mem_fs(mem_fs, dataset_zip_file_path):
   tf.logging.info('Copying dataset to in-memory filesystem.')

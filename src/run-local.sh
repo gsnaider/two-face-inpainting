@@ -21,7 +21,7 @@ gcloud ml-engine local train \
     --experiment_dir $EXPERIMENT_DIR \
     --facenet_dir $FACENET_DIR \
     --run_mode "TRAIN" \
-    --verbosity "INFO" \
+    --verbosity "DEBUG" \
     \
     --batch_normalization \
     --batch_size 8 \
