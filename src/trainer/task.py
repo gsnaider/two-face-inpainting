@@ -219,14 +219,12 @@ def train(dataset, generator, local_discriminator, global_discriminator,
     "update_ops: {}".format(update_ops))
 
   with tf.control_dependencies(update_ops):
-    # TODO check that this is the correct way to use optimizer with keras.
     gen_optimizer = tf.train.AdamOptimizer(args.gen_learning_rate).minimize(
       gen_loss, var_list=generator.variables,
       global_step=global_step)
     tf.logging.debug(
       'Generator variables {}'.format([v.name for v in generator.variables]))
 
-    # TODO Seems that the disc optimizer is propagating changes to the generator.
     local_disc_optimizer = tf.train.AdamOptimizer(
       args.disc_learning_rate).minimize(
       local_disc_loss, var_list=local_discriminator.variables,
@@ -282,39 +280,6 @@ def train(dataset, generator, local_discriminator, global_discriminator,
           checkpoint_dir=os.path.join(args.experiment_dir, "train"),
           hooks=hooks) as sess:
     while not sess.should_stop():
-      if (args.batch_normalization):
-        # TODO remove these (and all other related debug logs) after verifying BN works correctly.
-        tf.logging.debug(
-          "GEN_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              gen_bn_layers[0].weights)))
-        tf.logging.debug(
-          "GEN_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              gen_bn_layers[1].weights)))
-
-        tf.logging.debug(
-          "LOCAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              local_disc_bn_layers[0].weights)))
-        tf.logging.debug(
-          "LOCAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              local_disc_bn_layers[1].weights)))
-
-        tf.logging.debug(
-          "GLOBAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              global_disc_bn_layers[0].weights)))
-        tf.logging.debug(
-          "GLOBAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              global_disc_bn_layers[1].weights)))
-        tf.logging.debug(
-          "GLOBAL_DISC_BN_3: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              global_disc_bn_layers[2].weights)))
-
       train_step(sess, optimizers, gen_loss, local_disc_loss,
                  global_disc_loss,
                  global_step)
@@ -373,23 +338,6 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
       len(global_discriminator.get_updates_for(
         global_discriminator.inputs))))
 
-  if (args.batch_normalization):
-    gen_bn_layers = [generator.layers[8], generator.layers[11]]
-    local_disc_bn_layers = [local_discriminator.layers[2],
-                            local_discriminator.layers[5]]
-    global_disc_bn_layers = [global_discriminator.layers[2],
-                             global_discriminator.layers[5],
-                             global_discriminator.layers[9]]
-
-    tf.logging.debug("GENERATOR BN LAYERS {}".format(gen_bn_layers))
-    tf.logging.debug("LOCAL_DISC BN LAYERS {}".format(local_disc_bn_layers))
-    tf.logging.debug("GLOBAL_DISC BN LAYERS {}".format(global_disc_bn_layers))
-
-    tf.logging.debug("PRINTING BN WEIGHTS")
-    for bn_layer in (
-            gen_bn_layers + local_disc_bn_layers + global_disc_bn_layers):
-      tf.logging.debug("Weights: {}".format(bn_layer.weights))
-
   tf.logging.info("GENERATOR")
   generator.summary()
   tf.logging.info("LOCAL DISCRIMINATOR")
@@ -423,38 +371,6 @@ def evaluate(dataset, generator, local_discriminator, global_discriminator,
                                    sess.graph)
 
     while True:
-      if (args.batch_normalization):
-        tf.logging.debug(
-          "GEN_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              gen_bn_layers[0].weights)))
-        tf.logging.debug(
-          "GEN_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              gen_bn_layers[1].weights)))
-
-        tf.logging.debug(
-          "LOCAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              local_disc_bn_layers[0].weights)))
-        tf.logging.debug(
-          "LOCAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              local_disc_bn_layers[1].weights)))
-
-        tf.logging.debug(
-          "GLOBAL_DISC_BN_1: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              global_disc_bn_layers[0].weights)))
-        tf.logging.debug(
-          "GLOBAL_DISC_BN_2: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              global_disc_bn_layers[1].weights)))
-        tf.logging.debug(
-          "GLOBAL_DISC_BN_3: Gamma {} - Beta {} - Moving_mean {} - Moving_variance {}".format(
-            *sess.run(
-              global_disc_bn_layers[2].weights)))
-
       gen_loss_value, local_disc_loss_value, global_disc_loss_value, global_step_value = sess.run(
         [gen_loss, local_disc_loss, global_disc_loss, global_step])
       tf.logging.info(
