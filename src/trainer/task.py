@@ -265,6 +265,8 @@ def train(dataset, generator, local_discriminator, global_discriminator,
   local_discriminator.summary()
   tf.logging.info("GLOBAL DISCRIMINATOR")
   global_discriminator.summary()
+  tf.logging.info("FACENET")
+  facenet.summary()
 
   tf.summary.scalar('gen_loss', gen_loss)
   tf.summary.scalar('local_disc_loss', local_disc_loss)
