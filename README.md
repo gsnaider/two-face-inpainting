@@ -21,12 +21,12 @@ Two-Face Inpainting was implemented as the final project for my Software Enginee
         + [TensorFlow](#tensorflow)
         + [Python libraries](#python-libraries)
         + [Google Cloud Platform](#gcp)
-    	+ [Dataset setup](#dataset)
-    	+ [FaceNet](#facenet)
+        + [Dataset setup](#dataset)
+        + [FaceNet](#facenet)
     * [Run modes](#run-modes)
-	    + [Train](#train)
-	    + [Evaluation](#eval)
-	    + [Save model](#save-model)
+        + [Train](#train)
+        + [Evaluation](#eval)
+        + [Save model](#save-model)
 
 
 <a name="documentation"/>
