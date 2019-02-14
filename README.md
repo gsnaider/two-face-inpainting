@@ -1,5 +1,5 @@
 # Two-Face Inpainting
-Two-Face Inpainting consists of a Machine Learning model that uses Generative Adversarial Networks for reconstructing missing regions of facial images. The model takes as input the masked image and a reference image from the same person (thus the name Two-Face Inpainting), and generates the missing region on the masked image. The project also has a [Web Application](https://github.com/gsnaider/two-face-web-client) for testing the model with any facial image.
+Two-Face Inpainting consists of a Machine Learning model that uses Generative Adversarial Networks for reconstructing missing regions of facial images. The model takes as input the masked image and a reference image from the same person (thus the name Two-Face Inpainting), and generates the missing region on the masked image. The project also has a [Web Application](https://github.com/gsnaider/two-face-web-client) for testing the model with any facial image.<br/>
 Two-Face Inpainting was implemented as the final project for my Software Engineering degree at the University of Buenos Aires.
 
 <img src="./imgs/overview.png" alt="Overview">
@@ -61,7 +61,7 @@ This will pull down a minimal Docker image with TensorFlow Serving installed.
 <a name="saved-model"/>
 
 #### Saved Model
-The saved model is provided in the release v1.0, in the `saved_model.tar.xz` file. You can move the contents of that directory to any location you want on your computer. From now on we will referr to that location as `<saved_model_dir>`.
+The saved model is provided in the release v1.0, in the `saved_model.tar.xz` file. You will have to extract that directory, and you can move the contents of that directory to any location you want on your computer. From now on we will refer to that location as `<saved_model_dir>`.
 
 <a name="launch"/>
 
@@ -71,12 +71,15 @@ In order to launch the model, simply run:
 ```sh
 sudo ./tf-serving/start-docker.sh
 ```
-It might take a couple of minutes to start the server.
-For making a sample request, you can use the provided sample file and script:
+It might take a couple of minutes for the server to start.<br/>
+Once the server's initialized, we can make requests via the REST API provided by TensorFlow Serving. For making a sample request, you can use the provided sample file and script:
+
 ```sh
 sudo ./tf-serving/sample-request.sh
 ```
-And for stopping the server, simply run:
+
+For stopping the server, simply run:
+
 ```sh
 sudo ./tf-serving/stop-docker.sh
 ```
@@ -146,7 +149,7 @@ data
 ├── train
 │   ├── masked
 │   │   ├── 0257343
-│   │   ├── 001.jpg
+│   │   │	├── 001.jpg
 │   │   │   ├── 002.jpg
 │   │   │   ├── 003.jpg
 │   │   │   └── 004.jpg
@@ -180,9 +183,9 @@ data
     └── reference
 ```
 From now on we will refer to the root directory of the dataset as `<dataset_dir>`.
-The data is splitted between a `train` and `validation` directories (a test directory was kept separate for final testing using the Web Application). Within each directory, the data is also splitted into three directories: `masked`, `real`, and `reference`. The `masked` directory contains the images that will be masked during training (i.e. a region of the image will be removed in order to be filled by the model). The `referenece` directory contains images from the same persons as in `masked`. Those images will be used as reference by the model when completing the masked images. Lastly, the `real` directory contains images that won't be modified by the model. Instead, those images are used for training the Discriminators from the GAN architecture (since Discriminators need both real and generated images for training). Note that the three sub-directories (masked, real, and reference) within each dataset (train and validation) have the same set of identities (persons).
-In order to efficiently read through the dataset, the model uses the `.txt` files shown above. The `masked-files.txt` and `masked-files.txt` have a unique name for each image in their respective datasets. The `reference-files.txt` specifies for each identity, the possible images to use as reference (so that the model can pick one at random).
-The scripts provided in the `dataset-files` directory from the repository can be used for structuring the dataset in this way.
+The data is splitted between a `train` and `validation` directories (a test directory was kept separate for final testing using the Web Application). Within each directory, the data is also splitted into three sub-directories: `masked`, `real`, and `reference`. The `masked` directory contains the images that will be masked during training (i.e. a region of the image will be removed in order to be filled by the model). The `referenece` directory contains images from the same persons as in `masked`. Those images will be used as reference by the model when completing the masked images. Lastly, the `real` directory contains images that won't be modified by the model. Instead, those images are used for training the Discriminators from the GAN architecture (since Discriminators need both real and generated images for training). Note that the three sub-directories (masked, real, and reference) within each dataset (train and validation) have the same set of identities (persons).<br/>
+In order to efficiently read through the dataset, the model uses the `.txt` files shown above. The `masked-files.txt` and `real-files.txt` have a unique name for each image in their respective datasets. The `reference-files.txt` specifies for each identity, the possible images to use as reference (so that the model can pick one at random).
+The scripts provided in the `dataset-files` directory from the repository can be used for structuring the dataset in this way.<br/>
 The `<dataset_dir>` also contains a `data.zip` file. This zip contains the same files as in the `<dataset_dir>` (ommiting the `data.zip` file). This can be used for running the model with an in-memory dataset.
 
 <a name="facenet"/>
@@ -200,7 +203,7 @@ The [FaceNet](https://www.cv-foundation.org/openaccess/content_cvpr_2015/papers/
 
 #### Train
 
-In order to run the model in training mode, simply run the `src/run-local.sh` script. Make sure that the `DATASET_PATH` variable points to the `<dataset_dir>`, and that the `FACENET_DIR` variable points to the `<facenet_dir>`. The directory specified in `EXPERIMENT_DIR` is where the checkpoints of the experiment will be saved. You can use [TensorBoard](https://www.tensorflow.org/guide/summaries_and_tensorboard) for visualizing the results in the `EXPERIMENT_DIR`.
+In order to run the model in training mode, simply run the `src/run-local.sh` script. Make sure that the `DATASET_PATH` variable points to the `<dataset_dir>`, or to the `data.zip` file within `<dataset_dir>` for running with an in-memory dataset. The `FACENET_DIR` variable should point to the `<facenet_dir>`. The directory specified in `EXPERIMENT_DIR` is where the checkpoints of the experiment will be saved. You can use [TensorBoard](https://www.tensorflow.org/guide/summaries_and_tensorboard) for visualizing the results in the `EXPERIMENT_DIR`.
 
 <a name="eval"/>
 
