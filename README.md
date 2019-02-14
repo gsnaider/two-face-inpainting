@@ -1,11 +1,8 @@
 # Two-Face Inpainting
-Two-Face Inpainting consists of a Machine Learning model capable of reconstructing missing regions of facial images. The model takes as input the masked image and a reference image from the same person (thus the name Two-Face Inpainting), and generates the missing region on the masked image. The project also has a [Web Application](https://github.com/gsnaider/two-face-web-client) for testing the model with any facial image.
-Two-Face Inpainting was implemented as my final project for the Software Engineering degree at the University of Buenos Aires.
+Two-Face Inpainting consists of a Machine Learning model that uses Generative Adversarial Networks for reconstructing missing regions of facial images. The model takes as input the masked image and a reference image from the same person (thus the name Two-Face Inpainting), and generates the missing region on the masked image. The project also has a [Web Application](https://github.com/gsnaider/two-face-web-client) for testing the model with any facial image.
+Two-Face Inpainting was implemented as the final project for my Software Engineering degree at the University of Buenos Aires.
 
-
-[//]: # (TODO add images.)
-[//]: # (Image of the model receiving both images, and the reconstructed image.)
-[//]: # (<img src="./doc/overview.png" alt="Overview">)
+<img src="./imgs/overview.png" alt="Overview">
 
 [//]: # (//TODO add license.)
 [//]: # (//TODO maybe add Architecture description with image.)
@@ -16,12 +13,13 @@ Two-Face Inpainting was implemented as my final project for the Software Enginee
     * [Pre-requisites](#deploy-pre-requisites)
         + [Docker](#docker)
         + [TensorFlow Serving](#tf-serving)
+        + [Saved Model](#saved-model)
     * [Launch the model](#launch)
 - [Run from sources](#run-from-sources)
     * [Pre-requisites](#run-pre-requisites)
         + [Python 3](#python-3)
         + [TensorFlow](#tensorflow)
-        + [Python libraries](#pyhton-libraries)
+        + [Python libraries](#python-libraries)
         + [Google Cloud Platform](#gcp)
     	+ [Dataset setup](#dataset)
     	+ [FaceNet](#facenet)
@@ -60,10 +58,12 @@ docker pull tensorflow/serving
 ```
 This will pull down a minimal Docker image with TensorFlow Serving installed.
 
-<a name="launch"/>
+<a name="saved-model"/>
 
 #### Saved Model
 The saved model is provided in the release v1.0, in the `saved_model.tar.xz` file. You can move the contents of that directory to any location you want on your computer. From now on we will referr to that location as `<saved_model_dir>`.
+
+<a name="launch"/>
 
 ### Launch the model
 Before launching the model, make sure the `MODEL_DIR` variable in the `tf-serving/start-docker.sh` script points to the  `<saved_model_dir>` from the previous step.
