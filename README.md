@@ -61,7 +61,7 @@ This will pull down a minimal Docker image with TensorFlow Serving installed.
 <a name="saved-model"/>
 
 #### Saved Model
-The saved model is provided in the release v1.1, in the `saved_model.tar.xz` file. You will have to extract that directory, and you can move the contents of that directory to any location you want on your computer. From now on we will refer to that location as `<saved_model_dir>`.
+The saved model is provided in the Release 1.2, in the `saved_model.tar.xz` file. You will have to extract that directory, and you can move the contents of that directory to any location you want on your computer. From now on we will refer to that location as `<saved_model_dir>`.
 
 <a name="launch"/>
 
@@ -192,7 +192,7 @@ The `<dataset_dir>` also contains a `data.zip` file. This zip contains the same 
 
 #### FaceNet
 
-The [FaceNet](https://www.cv-foundation.org/openaccess/content_cvpr_2015/papers/Schroff_FaceNet_A_Unified_2015_CVPR_paper.pdf) pre-trained model is used as part of the architecture. The model is provided in the release 1.1, in the `facenet.tar.xz` file. This model is an adapted version of the one found in https://github.com/serengil/tensorflow-101/blob/master/model, with an input size of 128x128 instead of 160x160. You can extract this directory and move it to any other location. From now on we will refer to the facenet directory as `<facenet_dir>`.
+The [FaceNet](https://www.cv-foundation.org/openaccess/content_cvpr_2015/papers/Schroff_FaceNet_A_Unified_2015_CVPR_paper.pdf) pre-trained model is used as part of the architecture. The model is provided in the Release 1.2, in the `facenet.tar.xz` file. This model is an adapted version of the one found in https://github.com/serengil/tensorflow-101/blob/master/model, with an input size of 128x128 instead of 160x160. You can extract this directory and move it to any other location. From now on we will refer to the facenet directory as `<facenet_dir>`.
 
 
 <a name="run-modes"/>
