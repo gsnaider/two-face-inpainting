@@ -33,7 +33,7 @@ Two-Face Inpainting was implemented as the final project for my Software Enginee
 
 ## Documentation
 [//]: # (//TODO host the pdf in github pages.)
-The full documentation of the project can be found [here](https://github.com/gsnaider/two-face-inpainting/blob/master/doc/Two-Face%20Inpainting.pdf) (in spanish).
+The full documentation of the project can be found [here](https://github.com/gsnaider/two-face-inpainting/blob/master/doc/Two-Face%20Inpainting.pdf) (in Spanish).
 
 <a name="deployment"/>
 
